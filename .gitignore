@@ -1,0 +1,27 @@
+node_modules
+.next
+out
+build
+.DS_Store
+*.pem
+npm-debug.log*
+.env*.local
+.vercel
+*.tsbuildinfo
+next-env.d.ts
+
+# local run logs + service config
+next.log
+backend/api.log
+backend/.env
+backend/.models/
+
+# python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+
+# local editor/tooling config
+.claude/
