@@ -20,6 +20,11 @@ export default function HomePage() {
       {/* ---------------- Hero ---------------- */}
       <section className="relative overflow-hidden rounded-[28px] border border-white/8 bg-ink-1 grain">
         <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 bg-cover bg-center opacity-70"
+          style={{ backgroundImage: "url(/room-bg.svg)" }}
+        />
+        <div
           className="pointer-events-none absolute -right-24 -top-24 size-[460px] rounded-full blur-[90px] opacity-45 animate-breathe"
           style={{
             background:

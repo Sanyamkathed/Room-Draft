@@ -39,7 +39,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   if (immersive) return <>{children}</>;
 
   return (
-    <div className="flex min-h-dvh">
+    <div className="relative flex min-h-dvh">
+      {/* Room-themed backdrop: a faint wireframe room with a lamp glow. */}
+      <div
+        aria-hidden
+        className="pointer-events-none fixed inset-0 -z-10 bg-ink-0 bg-cover bg-center opacity-90"
+        style={{ backgroundImage: "url(/room-bg.svg)" }}
+      />
       {/* Desktop rail */}
       <nav
         aria-label="Main"
