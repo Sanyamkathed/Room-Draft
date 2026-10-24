@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, Camera, Plus, Sparkles } from "lucide-react";
+import { ArrowRight, Camera, Plus, Ruler, Sofa, Sparkles } from "lucide-react";
 import { AESTHETICS } from "@/lib/catalog/types";
 import { PRODUCTS, PRODUCT_COUNT } from "@/lib/catalog/seed";
 import { formatINR } from "@/lib/catalog/source";
@@ -9,6 +9,7 @@ import { useProjects } from "@/lib/hooks/useProjects";
 import { Badge, Skeleton, buttonClasses } from "@/components/ui/primitives";
 import { MoodTile } from "@/components/shell/MoodTile";
 import { ProjectCard } from "@/components/shell/ProjectCard";
+import { ProductThumb } from "@/components/studio/ProductThumb";
 
 export default function HomePage() {
   const { projects, loading, remove } = useProjects();
@@ -78,6 +79,54 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* ---------------- How it works ---------------- */}
+      <section className="mt-14" aria-labelledby="how-it-works">
+        <header className="mb-5">
+          <h2 id="how-it-works" className="text-[22px] font-semibold tracking-[-0.025em]">
+            How AURA works
+          </h2>
+          <p className="mt-1 text-[13px] text-chalk-3">
+            See decor in your own room before you spend a rupee
+          </p>
+        </header>
+
+        <ol className="grid gap-3 md:grid-cols-3">
+          {[
+            {
+              icon: Camera,
+              title: "Upload a photo",
+              body: "Take one picture of your room. Nothing leaves your device unless you choose.",
+            },
+            {
+              icon: Ruler,
+              title: "We rebuild it in 3D",
+              body: "AURA works out the walls, floor and size, so everything you add is true to scale.",
+            },
+            {
+              icon: Sofa,
+              title: "Drop in decor",
+              body: "Place lamps, posters, plants and furniture. They sit on tables and hang on walls.",
+            },
+          ].map(({ icon: Icon, title, body }, i) => (
+            <li
+              key={title}
+              className="relative rounded-[var(--radius-card)] border border-white/10 bg-ink-1/70 p-5 backdrop-blur-sm"
+            >
+              <div className="mb-4 flex items-center justify-between">
+                <span className="grid size-10 place-items-center rounded-[12px] bg-accent/12 text-accent ring-1 ring-accent/25">
+                  <Icon className="size-5" strokeWidth={1.9} />
+                </span>
+                <span className="text-[12px] font-medium tabular-nums text-chalk-4">
+                  Step {i + 1}
+                </span>
+              </div>
+              <h3 className="text-[15px] font-semibold tracking-[-0.015em]">{title}</h3>
+              <p className="mt-1.5 text-[13px] leading-relaxed text-chalk-3">{body}</p>
+            </li>
+          ))}
+        </ol>
+      </section>
+
       {/* ---------------- Continue designing ---------------- */}
       <section className="mt-14">
         <header className="mb-5 flex items-end justify-between gap-4">
@@ -107,7 +156,7 @@ export default function HomePage() {
         ) : recent.length === 0 ? (
           <Link
             href="/onboarding"
-            className="group flex aspect-[16/7] w-full flex-col items-center justify-center gap-3 rounded-[var(--radius-card)] border border-dashed border-white/12 bg-ink-1/50 transition-all duration-300 hover:border-accent/40 hover:bg-ink-1"
+            className="group flex aspect-[16/7] w-full flex-col items-center justify-center gap-3 rounded-[var(--radius-card)] border border-dashed border-white/12 bg-ink-1/90 transition-all duration-300 hover:border-accent/40 hover:bg-ink-1"
           >
             <div className="grid size-12 place-items-center rounded-[14px] bg-white/6 text-chalk-2 transition-all duration-300 group-hover:bg-accent group-hover:text-black">
               <Plus className="size-5" strokeWidth={2.2} />
@@ -191,17 +240,10 @@ export default function HomePage() {
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
           {featured.map((p) => (
             <Link key={p.id} href={`/shop?q=${encodeURIComponent(p.name)}`} className="group">
-              <div
-                className="relative aspect-square overflow-hidden rounded-[16px] border border-white/8 transition-all duration-400 group-hover:border-white/18"
-                style={{
-                  background: `radial-gradient(60% 60% at 50% 55%, ${p.emissive?.color}44 0%, transparent 70%), linear-gradient(160deg, #131317, #0c0c0f)`,
-                }}
-              >
-                <div
-                  className="absolute left-1/2 top-1/2 size-14 -translate-x-1/2 -translate-y-1/2 rounded-full blur-xl transition-all duration-500 group-hover:size-20"
-                  style={{ background: p.emissive?.color, opacity: 0.55 }}
-                />
-              </div>
+              <ProductThumb
+                product={p}
+                className="aspect-square w-full rounded-[16px] transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-[1.03]"
+              />
               <p className="mt-2 truncate text-[12.5px] font-medium text-chalk">{p.name}</p>
               <p className="text-[12px] text-chalk-3">{formatINR(p.price)}</p>
             </Link>
