@@ -11,6 +11,7 @@ import {
   User,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
+import { RoomBackdrop } from "./RoomBackdrop";
 
 const NAV = [
   { href: "/", label: "Home", icon: Home },
@@ -39,7 +40,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   if (immersive) return <>{children}</>;
 
   return (
-    <div className="flex min-h-dvh">
+    <div className="relative flex min-h-dvh">
+      <RoomBackdrop />
       {/* Desktop rail */}
       <nav
         aria-label="Main"

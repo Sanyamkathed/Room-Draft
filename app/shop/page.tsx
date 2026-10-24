@@ -84,7 +84,7 @@ function ShopContent() {
       </header>
 
       {/* ---------------- Filters ---------------- */}
-      <div className="sticky top-0 z-20 -mx-5 mb-6 space-y-3 bg-ink-0/92 px-5 py-3 backdrop-blur-xl md:-mx-10 md:px-10">
+      <div className="sticky top-0 z-20 -mx-5 mb-6 space-y-3 bg-ink-0/60 px-5 py-3 backdrop-blur-xl md:-mx-10 md:px-10">
         <div className="flex flex-wrap items-center gap-2.5">
           <div className="relative min-w-[200px] flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-chalk-4" />

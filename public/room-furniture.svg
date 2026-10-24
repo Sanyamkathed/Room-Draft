@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="wire" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity=".16"/>
+      <stop offset="1" stop-color="#d8ff3c" stop-opacity=".22"/>
+    </linearGradient>
+  </defs>
+  <g fill="none" stroke="url(#wire)" stroke-width="1.2">
+    <path d="M880 400H1020M880 400V408H1020V400" stroke-opacity=".9"/>
+    <path d="M850 540H1050V556H850Z M870 556V610M1030 556V610" stroke-opacity=".9"/>
+    <path d="M945 540V500M925 500H965L957 465H933Z" stroke="#d8ff3c" stroke-opacity=".55"/>
+    <path d="M800 250V215" stroke-opacity=".6"/>
+  </g>
+  <circle cx="950" cy="480" r="46" fill="#d8ff3c" opacity=".08"/>
+</svg>

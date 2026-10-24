@@ -4,6 +4,7 @@ import { create } from "zustand";
 import { productById } from "@/lib/catalog/source";
 import type { AestheticId } from "@/lib/catalog/types";
 import { resolvePlacement, settleItems } from "@/lib/placement/resolve";
+import { stackSurface } from "@/lib/placement/transform";
 import type { PlacedItem, PlacementResult } from "@/lib/placement/types";
 import { buildRoomFromPlan } from "@/lib/room/plan";
 import { reconstructRoom } from "@/lib/room/reconstruct";
@@ -327,6 +328,44 @@ export const useStudio = create<StudioState>((set, get) => {
       const product = productById(item.productId);
       if (!product) return;
 
+      // A tabletop item positioned over a stackable object (a lamp slid over a
+      // desk) rests on it: pick the highest host top at or below the chosen
+      // height + tolerance, or, if the item sits on the floor, the highest one
+      // under its footprint.
+      let hostId: string | undefined = item.supportId ?? undefined;
+      // A supported item the user dragged off its host (or lifted/lowered away
+      // from the host top) is no longer resting on it.
+      if (hostId) {
+        const host = items.find((i) => i.id === hostId);
+        const hp = host ? productById(host.productId) : undefined;
+        const top = host && hp ? stackSurface(host, hp) : null;
+        const [x, y, z] = item.position;
+        if (
+          !top ||
+          x < top.min[0] || x > top.max[0] || z < top.min[1] || z > top.max[1] ||
+          Math.abs(y - top.y) > 0.05
+        ) {
+          hostId = undefined;
+        }
+      }
+      if (!hostId && product.mount === "tabletop") {
+        let bestY = -1;
+        for (const other of items) {
+          if (other.id === id) continue;
+          const op = productById(other.productId);
+          const top = op ? stackSurface(other, op) : null;
+          if (!top) continue;
+          const [x, , z] = item.position;
+          if (x < top.min[0] || x > top.max[0] || z < top.min[1] || z > top.max[1]) continue;
+          // Explicit height above the floor: only hosts at or below it.
+          if (item.position[1] > 0.05 && top.y > item.position[1] + 0.05) continue;
+          if (top.y > bestY) {
+            bestY = top.y;
+            hostId = other.id;
+          }
+        }
+      }
+
       const resolved = resolvePlacement(product, {
         room,
         items: items.filter((i) => i.id !== id),
@@ -340,7 +379,7 @@ export const useStudio = create<StudioState>((set, get) => {
                 : [0, 0, 1]
             : [0, 1, 0],
           surfaceId: item.surface ?? undefined,
-          itemId: item.supportId ?? undefined,
+          itemId: hostId,
         },
         ray: null,
         gridSnap,

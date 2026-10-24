@@ -318,6 +318,16 @@ function PositionControls({
         onChange={(v) => onChange([position[0], position[1], v])}
         onCommit={onCommit}
       />
+      <Slider
+        label="Height"
+        value={position[1]}
+        min={0}
+        max={Math.max(0.1, roomHeight - 0.1)}
+        step={0.01}
+        format={(v) => `${v.toFixed(2)} m`}
+        onChange={(v) => onChange([position[0], v, position[2]])}
+        onCommit={onCommit}
+      />
     </>
   );
 }
