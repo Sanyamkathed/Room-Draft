@@ -11,6 +11,7 @@ import {
   type PerspectiveCamera as ThreePerspectiveCamera,
 } from "three";
 import { productById } from "@/lib/catalog/source";
+import { carryDependents } from "@/lib/placement/carry";
 import type { PlacedItem } from "@/lib/placement/types";
 import { createEnvironmentTexture } from "@/lib/three/env";
 import { applyPhotoCamera, clearPhotoCamera } from "@/lib/three/photoCamera";
@@ -402,9 +403,14 @@ function Scene() {
       .map((i) => i.id),
   );
 
+  // While an item is being dragged, whatever rests on it rides along with the
+  // preview, so you can see the lamp go with the desk before letting go.
+  const moving = draft?.itemId ? items.find((i) => i.id === draft.itemId) : undefined;
+  const carried =
+    moving && draft?.result ? carryDependents(items, moving, { ...draft.result.item, id: moving.id }) : items;
   const visible: PlacedItem[] = showOriginal
     ? []
-    : items.filter((i) => i.id !== draft?.itemId);
+    : carried.filter((i) => i.id !== draft?.itemId);
 
   const draftProduct = draft ? productById(draft.productId) : null;
 

@@ -4,6 +4,7 @@ import * as React from "react";
 import {
   BoxGeometry,
   CanvasTexture,
+  Color,
   EdgesGeometry,
   SRGBColorSpace,
   Texture,
@@ -19,7 +20,9 @@ import { useStudio } from "@/lib/store/studio";
 import { ProductModel } from "./models/ProductModel";
 
 const ACCENT = "#d8ff3c";
-const BLOCKED = "#ff6b6b";
+const BLOCKED = "#ff4d4d";
+/** Preview tint when the spot is valid. */
+const CAN_PLACE = "#3ddc84";
 
 /**
  * Selection outline.
@@ -224,7 +227,17 @@ function useGhostMaterials(ref: React.RefObject<Group | null>, ghost: boolean, v
     const group = ref.current;
     if (!group || !ghost) return;
 
-    const touched: { mat: import("three").Material; opacity: number; transparent: boolean; depthWrite: boolean }[] = [];
+    type Touched = {
+      mat: import("three").MeshStandardMaterial;
+      opacity: number;
+      transparent: boolean;
+      depthWrite: boolean;
+      color?: import("three").Color;
+      emissive?: import("three").Color;
+      emissiveIntensity?: number;
+    };
+    const touched: Touched[] = [];
+    const tint = valid ? CAN_PLACE : BLOCKED;
 
     group.traverse((child) => {
       const mesh = child as import("three").Mesh;
@@ -232,16 +245,28 @@ function useGhostMaterials(ref: React.RefObject<Group | null>, ghost: boolean, v
       const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
       for (const mat of mats) {
         const m = mat as import("three").MeshStandardMaterial;
+        // Remember EVERYTHING we change. The colour used to be overwritten
+        // with red and never put back, so a preview that had once crossed a
+        // blocked spot stayed red even where it could be placed.
         touched.push({
           mat: m,
           opacity: m.opacity,
           transparent: m.transparent,
           depthWrite: m.depthWrite,
+          color: m.color?.clone(),
+          emissive: m.emissive?.clone(),
+          emissiveIntensity: m.emissiveIntensity,
         });
         m.transparent = true;
-        m.opacity = valid ? 0.62 : 0.4;
+        m.opacity = valid ? 0.7 : 0.45;
         m.depthWrite = false;
-        if (!valid && "color" in m) m.color.set(BLOCKED);
+        // Tint toward green or red and light it from within, so the answer
+        // reads at a glance even over a dark or busy photo.
+        if (m.color) m.color.lerp(new Color(tint), valid ? 0.45 : 0.7);
+        if (m.emissive) {
+          m.emissive.set(tint);
+          m.emissiveIntensity = valid ? 0.35 : 0.45;
+        }
       }
       mesh.castShadow = false;
       mesh.receiveShadow = false;
@@ -249,10 +274,13 @@ function useGhostMaterials(ref: React.RefObject<Group | null>, ghost: boolean, v
 
     return () => {
       for (const t of touched) {
-        const m = t.mat as import("three").MeshStandardMaterial;
+        const m = t.mat;
         m.transparent = t.transparent;
         m.opacity = t.opacity;
         m.depthWrite = t.depthWrite;
+        if (t.color && m.color) m.color.copy(t.color);
+        if (t.emissive && m.emissive) m.emissive.copy(t.emissive);
+        if (t.emissiveIntensity !== undefined) m.emissiveIntensity = t.emissiveIntensity;
       }
     };
   }, [ref, ghost, valid]);
@@ -326,12 +354,12 @@ export function PlacedObject({
         />
       </group>
 
-      {(selected || (ghost && !valid)) && (
+      {(selected || ghost) && (
         <SelectionBox
           product={product}
           scale={1}
           override={item.size}
-          colour={ghost && !valid ? BLOCKED : ACCENT}
+          colour={ghost ? (valid ? CAN_PLACE : BLOCKED) : ACCENT}
         />
       )}
     </group>
