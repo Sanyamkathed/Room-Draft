@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="wire" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity=".16"/>
+      <stop offset="1" stop-color="#d8ff3c" stop-opacity=".22"/>
+    </linearGradient>
+  </defs>
+  <g fill="none" stroke="url(#wire)" stroke-width="1.2">
+    <path d="M520 250H1080V610H520Z"/>
+    <path d="M0 40L520 250M1600 40L1080 250M0 880L520 610M1600 880L1080 610"/>
+    <g stroke-opacity=".55">
+      <path d="M520 610L330 900M640 610L560 900M760 610L740 900M880 610L920 900M1000 610L1100 900M1080 610L1290 900"/>
+      <path d="M470 680H1130M410 760H1190M330 860H1270"/>
+    </g>
+    <path d="M640 310H800V450H640ZM720 310V450M640 380H800" stroke-opacity=".8"/>
+  </g>
+</svg>
