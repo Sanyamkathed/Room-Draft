@@ -5,18 +5,24 @@ import { useFrame } from "@react-three/fiber";
 import {
   AdditiveBlending,
   BackSide,
+  CanvasTexture,
   CatmullRomCurve3,
   DoubleSide,
   IcosahedronGeometry,
+  PlaneGeometry,
   Quaternion,
+  SRGBColorSpace,
   Shape,
   SphereGeometry,
+  Texture,
   Vector2,
   Vector3,
+  type Group,
   type Object3D,
   type SpotLight as ThreeSpotLight,
-  type Texture,
 } from "three";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { RoundedBox } from "@react-three/drei";
 import type { Product } from "@/lib/catalog/types";
 import type { Vec3 } from "@/lib/room/types";
 import {
@@ -30,6 +36,7 @@ import {
   weaveTexture,
 } from "@/lib/three/textures";
 import { FURNITURE_MODELS } from "./FurnitureModel";
+import { bledCanvas, inflatedGeometry } from "@/lib/three/inflate";
 import { FinishMaterial, MergedBoxes, Slab, useSeeded } from "./finish";
 import { M, catenary, leafShape, neonCurve, seededRandom } from "./shapes";
 
@@ -2706,6 +2713,273 @@ function BeanBag({ product }: ModelProps) {
   );
 }
 
+/* ================================================================== */
+/* User-made items                                                     */
+/* ================================================================== */
+
+const customTextures = new Map<string, Texture>();
+
+/** One decoded texture per item version, shared by every placed copy. */
+function useCustomImageTexture(key: string, dataUrl?: string): Texture | null {
+  const [tex, setTex] = React.useState<Texture | null>(() => customTextures.get(key) ?? null);
+  React.useEffect(() => {
+    if (!dataUrl) {
+      setTex(null);
+      return;
+    }
+    const hit = customTextures.get(key);
+    if (hit) {
+      setTex(hit);
+      return;
+    }
+    let live = true;
+    const img = new Image();
+    img.onload = () => {
+      if (!live) return;
+      const t = new Texture(img);
+      t.colorSpace = SRGBColorSpace;
+      t.anisotropy = 8;
+      t.needsUpdate = true;
+      customTextures.set(key, t);
+      setTex(t);
+    };
+    img.src = dataUrl;
+    return () => {
+      live = false;
+    };
+  }, [key, dataUrl]);
+  return tex;
+}
+
+/**
+ * A cutout with real thickness: front and back faces carry the photo, and a
+ * stack of slightly darker alpha-cut layers between them forms the edge, so
+ * from an angle it reads as a solid standee rather than a sheet of paper.
+ * The edge layers are merged into one mesh — one draw call however thick.
+ */
+function ThickCutout({
+  texture,
+  w,
+  h,
+  t,
+  glow,
+}: {
+  texture: Texture;
+  w: number;
+  h: number;
+  t: number;
+  glow?: string;
+}) {
+  const layers = Math.max(3, Math.min(10, Math.round(t / 0.003)));
+  const edge = React.useMemo(() => {
+    const geos = Array.from({ length: layers }).map((_, i) => {
+      const g = new PlaneGeometry(w, h);
+      g.translate(0, 0, -t / 2 + (t * (i + 0.5)) / layers);
+      return g;
+    });
+    const merged = mergeGeometries(geos, false);
+    geos.forEach((g) => g.dispose());
+    return merged;
+  }, [w, h, t, layers]);
+  React.useEffect(() => () => edge?.dispose(), [edge]);
+
+  const face = (z: number, flip: boolean) => (
+    <mesh position={[0, 0, z]} rotation={[0, flip ? Math.PI : 0, 0]} castShadow>
+      <planeGeometry args={[w, h]} />
+      <meshStandardMaterial
+        map={texture}
+        alphaTest={0.4}
+        roughness={0.6}
+        emissive={glow}
+        emissiveMap={glow ? texture : undefined}
+        emissiveIntensity={glow ? 0.8 : 0}
+      />
+    </mesh>
+  );
+
+  return (
+    <group>
+      {face(t / 2, false)}
+      {face(-t / 2, true)}
+      {edge ? (
+        <mesh geometry={edge} castShadow>
+          <meshStandardMaterial map={texture} alphaTest={0.4} color="#8f8f8f" roughness={0.8} side={DoubleSide} />
+        </mesh>
+      ) : null}
+    </group>
+  );
+}
+
+/** The photo inflated into a rounded solid — see lib/three/inflate.ts. */
+function SculptedCutout({
+  texture,
+  cacheKey,
+  w,
+  h,
+  d,
+  flatBack,
+  glow,
+}: {
+  texture: Texture;
+  cacheKey: string;
+  w: number;
+  h: number;
+  d: number;
+  flatBack: boolean;
+  glow?: string;
+}) {
+  const geometry = React.useMemo(
+    () =>
+      inflatedGeometry(cacheKey, texture.image as HTMLImageElement, {
+        width: w,
+        height: h,
+        depth: d,
+        flatBack,
+      }),
+    [cacheKey, texture, w, h, d, flatBack],
+  );
+  // An opaque copy with the edge colours bled outward — the mesh defines the
+  // silhouette, so the rim must not sample transparent fringe.
+  const solid = React.useMemo(() => {
+    const t = new CanvasTexture(bledCanvas(cacheKey, texture.image as HTMLImageElement));
+    t.colorSpace = SRGBColorSpace;
+    t.anisotropy = 8;
+    return t;
+  }, [cacheKey, texture]);
+  React.useEffect(() => () => solid.dispose(), [solid]);
+
+  return (
+    <mesh geometry={geometry} castShadow receiveShadow>
+      <meshStandardMaterial
+        map={solid}
+        roughness={0.55}
+        metalness={0}
+        emissive={glow}
+        emissiveMap={glow ? solid : undefined}
+        emissiveIntensity={glow ? 0.8 : 0}
+      />
+    </mesh>
+  );
+}
+
+/** Turns its children about Y to face the camera, keeping them upright. */
+function FaceCamera({ children }: { children: React.ReactNode }) {
+  const ref = React.useRef<Group>(null);
+  const v = React.useMemo(() => new Vector3(), []);
+  useFrame(({ camera }) => {
+    const g = ref.current;
+    if (!g?.parent) return;
+    v.copy(camera.position);
+    g.parent.worldToLocal(v);
+    g.rotation.y = Math.atan2(v.x, v.z);
+  });
+  return <group ref={ref}>{children}</group>;
+}
+
+function CustomModel({ product, light, lightScale = 1 }: ModelProps) {
+  const spec = product.custom;
+  const w = M(product.dims.w);
+  const h = M(product.dims.h);
+  const d = M(product.dims.d);
+  const glow = product.emissive?.color;
+  const texKey = `${product.id}:${spec?.updatedAt ?? 0}`;
+  const texture = useCustomImageTexture(texKey, spec?.image);
+  const mount = product.mount;
+
+  // ---- Plain shape: no photo, just a well-finished primitive ----
+  if (!spec?.image) {
+    const colour = product.palette[0];
+    const finish =
+      spec?.finish === "metal" ? "metal" : spec?.finish === "wood" ? "wood" : spec?.finish === "fabric" ? "fabric" : spec?.finish === "gloss" ? "plastic" : "paint";
+    const material = glow ? (
+      <ShellMaterial colour={colour} glow={glow} intensity={0.6} />
+    ) : (
+      <FinishMaterial colour={colour} finish={finish} roughness={spec?.finish === "matte" ? 0.85 : undefined} />
+    );
+    // Centre each shape on its mount face, the way every model is authored.
+    const centre: Vec3 =
+      mount === "wall" ? [0, 0, d / 2] : mount === "ceiling" ? [0, -h / 2, 0] : [0, h / 2, 0];
+    const shape =
+      spec?.shape === "sphere" ? (
+        <mesh position={centre} scale={[w / 2, h / 2, d / 2]} castShadow receiveShadow>
+          <sphereGeometry args={[1, 40, 28]} />
+          {material}
+        </mesh>
+      ) : spec?.shape === "cylinder" ? (
+        <mesh position={centre} scale={[w / 2, 1, d / 2]} castShadow receiveShadow>
+          <cylinderGeometry args={[1, 1, h, 40]} />
+          {material}
+        </mesh>
+      ) : (
+        <RoundedBox args={[w, h, d]} radius={Math.min(0.01, Math.min(w, h, d) * 0.2)} smoothness={2} bevelSegments={2} position={centre} castShadow receiveShadow>
+          {material}
+        </RoundedBox>
+      );
+    return (
+      <group>
+        {shape}
+        <ProductLight product={product} enabled={light} scale={lightScale} position={centre} />
+      </group>
+    );
+  }
+
+  if (!texture) return null;
+  const style = spec.style;
+  const t = style === "flat" ? 0 : Math.min(0.03, Math.max(0.006, d * 0.25));
+
+  // ---- Wall: flat against the wall, or proud of it with real thickness ----
+  if (mount === "wall") {
+    return (
+      <group>
+        {glow ? <WallGlow colour={glow} width={w} height={h} spread={2.2} opacity={0.5} /> : null}
+        {style === "sculpted" ? (
+          <group position={[0, 0, 0.002]}>
+            <SculptedCutout texture={texture} cacheKey={texKey} w={w} h={h} d={Math.max(0.01, d)} flatBack glow={glow} />
+          </group>
+        ) : style === "flat" ? (
+          <mesh position={[0, 0, 0.006]} castShadow>
+            <planeGeometry args={[w, h]} />
+            <meshStandardMaterial
+              map={texture}
+              alphaTest={0.4}
+              roughness={0.7}
+              emissive={glow}
+              emissiveMap={glow ? texture : undefined}
+              emissiveIntensity={glow ? 0.8 : 0}
+            />
+          </mesh>
+        ) : (
+          <group position={[0, 0, t / 2 + 0.002]}>
+            <ThickCutout texture={texture} w={w} h={h} t={t} glow={glow} />
+          </group>
+        )}
+        <ProductLight product={product} enabled={light} scale={lightScale} position={[0, 0, 0.2]} />
+      </group>
+    );
+  }
+
+  // ---- Standing or hanging: a standee, optionally turning to face you ----
+  const y = mount === "ceiling" ? -h / 2 : h / 2;
+  const body =
+    style === "sculpted" ? (
+      <SculptedCutout texture={texture} cacheKey={texKey} w={w} h={h} d={Math.max(0.01, d)} flatBack={false} glow={glow} />
+    ) : style === "flat" ? (
+      <mesh castShadow>
+        <planeGeometry args={[w, h]} />
+        <meshStandardMaterial map={texture} alphaTest={0.4} roughness={0.7} side={DoubleSide} />
+      </mesh>
+    ) : (
+      <ThickCutout texture={texture} w={w} h={h} t={t} glow={glow} />
+    );
+
+  return (
+    <group position={[0, y, 0]}>
+      {style === "facing" ? <FaceCamera>{body}</FaceCamera> : body}
+      <ProductLight product={product} enabled={light} scale={lightScale} position={[0, 0, 0.15]} />
+    </group>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /* Dispatch                                                            */
 /* ------------------------------------------------------------------ */
@@ -2752,6 +3026,7 @@ const REGISTRY: Record<string, React.ComponentType<ModelProps>> = {
   mushroomLamp: MushroomLamp,
   cloudLight: CloudLight,
   checkerRug: CheckerRug,
+  custom: CustomModel,
 };
 
 export function ProductModel({ size, ...props }: ModelProps) {

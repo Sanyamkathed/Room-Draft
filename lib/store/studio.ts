@@ -523,6 +523,11 @@ export const useStudio = create<StudioState>((set, get) => {
         plan: plan ?? undefined,
         updatedAt: Date.now(),
         thumbnail: thumbnail ?? project.thumbnail,
+        // Embed the user-made items this room uses, so it opens complete
+        // anywhere — see lib/catalog/custom.ts.
+        customProducts: [...new Set(items.map((i) => i.productId))]
+          .map((pid) => productById(pid))
+          .filter((p): p is NonNullable<typeof p> => Boolean(p?.custom)),
       };
       await storage.saveProject(updated);
       set({ project: updated, dirty: false });

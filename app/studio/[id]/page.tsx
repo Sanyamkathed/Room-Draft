@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { Sparkles } from "lucide-react";
 import { StudioShell } from "@/components/studio/StudioShell";
 import { useStudio } from "@/lib/store/studio";
+import { loadCustomLibrary, registerCustom } from "@/lib/catalog/custom";
 import { storage } from "@/lib/storage/idb";
 import { loadImage } from "@/lib/utils/image";
 import { Spinner, buttonClasses } from "@/components/ui/primitives";
@@ -27,12 +28,15 @@ export default function StudioPage() {
 
     void (async () => {
       try {
-        const project = await storage.getProject(id);
+        const [project] = await Promise.all([storage.getProject(id), loadCustomLibrary()]);
         if (cancelled) return;
         if (!project) {
           setState("missing");
           return;
         }
+        // Items the user made render from the room's own copy if this
+        // browser's library doesn't have them (another device, cleared data).
+        registerCustom(project.customProducts);
 
         // Photos are stored as data URLs; the 3D layer needs decoded elements
         // before the room material can sample them. Full-room projects carry

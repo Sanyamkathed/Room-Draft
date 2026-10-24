@@ -179,6 +179,44 @@ real photos are yours, added by you, for your own room.
 
 ---
 
+## Your own items
+
+Anything the catalog doesn't have can be added by the user: paste a link (a
+Pinterest pin, an Amazon/IKEA/Etsy listing, any page with a product image, or a
+direct image link), upload a photo, or build a plain shape. The builder asks
+for the one thing a picture can't tell us — the real size — with presets and
+the photo's proportions kept, then the item behaves exactly like a catalog
+product: it snaps, stacks, collides and travels with the furniture it sits on.
+
+In 3D a photo becomes a flat cutout (posters, prints), a raised cutout with
+real thickness (signs, frames), a standee that turns to face the camera, or —
+the default for standing things — a **3D** solid. One photo never sees an
+object's back, so the 3D shape is built from what it does show exactly, the
+outline: `lib/three/inflate.ts` puffs the silhouette into a rounded body at
+the item's real width, height and depth (thick in the middle, a rounded rim,
+the photo wrapped over the front and mirrored on the back). It is the classic
+single-view "inflation" trick, runs in the browser in milliseconds and costs
+nothing; true reconstruction of an unseen back needs a learned image-to-3D
+model, which is a paid or GPU-hosted upgrade. Plain shapes get
+the same finishes as the furniture (wood, fabric, metal, gloss).
+
+**Security.** Link import runs through `app/api/import` because browsers
+can't read other sites' pages. `lib/server/safeFetch.ts` only fetches public
+http(s) addresses on default ports: every resolved IP is checked against
+private, loopback and link-local ranges *inside the socket's own DNS lookup*
+(no rebinding window), redirects are re-checked hop by hop, and responses are
+capped in size and time. Images are accepted only if their bytes are
+JPEG/PNG/WEBP/GIF, and the browser then redraws them onto a canvas before
+use, so only pixels survive. Imported text is reduced to plain characters.
+
+**For seeing, not selling.** User items exist to visualise decor in your own
+room: they carry no price and no shop link, and import reads only a picture
+and a name. They are saved only in this browser (and embedded in the rooms
+that use them). Imported photos belong to whoever took them; they never feed
+the shared catalog.
+
+---
+
 ## Placement
 
 `lib/placement/resolve.ts` is a single entry point that runs on every frame of a

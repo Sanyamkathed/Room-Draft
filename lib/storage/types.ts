@@ -1,4 +1,4 @@
-import type { AestheticId } from "@/lib/catalog/types";
+import type { AestheticId, Product } from "@/lib/catalog/types";
 import type { PlacedItem } from "@/lib/placement/types";
 import type {
   CaptureMode,
@@ -45,6 +45,11 @@ export interface Project {
   aesthetic: AestheticId | null;
   /** Small JPEG data URL for the project card. */
   thumbnail?: string;
+  /**
+   * The user-made items this room uses, embedded so the room still renders
+   * them on another device or after the item library is cleared.
+   */
+  customProducts?: Product[];
 }
 
 /** The pre-v2 shape, kept so saved rooms survive the upgrade. */

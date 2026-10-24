@@ -87,6 +87,7 @@ const GLYPH_FOR: Record<ModelKind, Glyph> = {
   dresser: "box",
   doorway: "opening",
   windowFrame: "opening",
+  custom: "box",
 };
 
 function GlyphPaths({ glyph, a, b }: { glyph: Glyph; a: string; b: string }) {
@@ -307,9 +308,24 @@ export function ProductThumb({
           style={{ background: glow, opacity: 0.4 }}
         />
       )}
-      <svg viewBox="0 0 64 64" className="relative size-full" aria-hidden>
-        <GlyphPaths glyph={glyph} a={a} b={b} />
-      </svg>
+      {product.custom?.image ? (
+        // The user's own cutout is the best possible thumbnail for their item.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={product.custom.image}
+          alt=""
+          draggable={false}
+          className="relative size-full object-contain p-1.5"
+        />
+      ) : (
+        <svg viewBox="0 0 64 64" className="relative size-full" aria-hidden>
+          <GlyphPaths
+            glyph={product.custom?.shape === "sphere" || product.custom?.shape === "cylinder" ? "disc" : glyph}
+            a={a}
+            b={b}
+          />
+        </svg>
+      )}
     </div>
   );
 }
