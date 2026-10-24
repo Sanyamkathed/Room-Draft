@@ -70,23 +70,34 @@ export function RightPanel() {
                   {product.name}
                 </p>
                 <p className="mt-0.5 text-[11.5px] text-chalk-4">{product.brand}</p>
-                <p className="mt-1.5 text-[13px] font-semibold text-accent">
-                  {formatINR(product.price)}
-                </p>
+                {/* Furniture and user-made items are not for sale: no price. */}
+                {product.price > 0 && !product.isFurniture ? (
+                  <p className="mt-1.5 text-[13px] font-semibold text-accent">
+                    {formatINR(product.price)}
+                  </p>
+                ) : null}
               </div>
             </div>
 
-            <a
-              href={marketplaceUrl(product)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-3 inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-[10px] border border-white/12 text-[12.5px] font-medium text-chalk-2 transition-all hover:border-white/25 hover:text-chalk"
-            >
-              Find it on Amazon.in
-              <ExternalLink className="size-3.5" />
-            </a>
+            {!product.isFurniture && marketplaceUrl(product) ? (
+              <a
+                href={marketplaceUrl(product)}
+                target="_blank"
+                rel="noopener noreferrer nofollow"
+                className="mt-3 inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-[10px] border border-white/12 text-[12.5px] font-medium text-chalk-2 transition-all hover:border-white/25 hover:text-chalk"
+              >
+                Find it on Amazon.in
+                <ExternalLink className="size-3.5" />
+              </a>
+            ) : null}
 
-            {product.mount === "wall" && (
+            {product.custom?.sourceSite ? (
+              <p className="mt-2 text-[11px] text-chalk-4">
+                Imported from {product.custom.sourceSite} · your own item
+              </p>
+            ) : null}
+
+            {product.mount === "wall" && !product.custom && (
               <RealPhotoField
                 current={item.customImage}
                 onChange={(customImage) => updateItem(item.id, { customImage })}

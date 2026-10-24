@@ -54,31 +54,41 @@ export function HoverPreview({
       }}
     >
       <div className="h-[226px] w-full bg-[radial-gradient(ellipse_at_50%_40%,#2a2a30_0%,#141417_70%)]">
-        <Canvas
-          frameloop={visible ? "always" : "never"}
-          dpr={[1, 1.5]}
-          camera={{ fov: 32, near: 0.01, far: 50, position: [0, 0, 2] }}
-          gl={{ antialias: true, alpha: true, powerPreference: "low-power", preserveDrawingBuffer: true }}
-          onCreated={({ gl }) => {
-            gl.toneMapping = ACESFilmicToneMapping;
-            gl.toneMappingExposure = 1.1;
-          }}
-        >
-          <Studio />
-          {product ? <Turntable key={product.id} product={product} /> : null}
-        </Canvas>
+        <PreviewStage product={product} active={visible} />
       </div>
       {product ? (
         <div className="px-3.5 py-2.5">
           <p className="truncate text-[13px] font-semibold tracking-[-0.015em] text-chalk">{product.name}</p>
           <p className="mt-0.5 flex items-center gap-2 text-[11.5px] text-chalk-4">
-            {!product.isFurniture && <span className="font-semibold text-chalk-2">{formatINR(product.price)}</span>}
+            {!product.isFurniture && product.price > 0 && <span className="font-semibold text-chalk-2">{formatINR(product.price)}</span>}
             <span className="tabular-nums">{formatDims(product)}</span>
           </p>
         </div>
       ) : null}
     </div>,
     document.body,
+  );
+}
+
+/**
+ * The turntable canvas on its own, for anywhere that needs to show one item
+ * in 3D (the hover card, the item builder). `active` pauses rendering.
+ */
+export function PreviewStage({ product, active = true }: { product: Product | null; active?: boolean }) {
+  return (
+    <Canvas
+      frameloop={active ? "always" : "never"}
+      dpr={[1, 1.5]}
+      camera={{ fov: 32, near: 0.01, far: 50, position: [0, 0, 2] }}
+      gl={{ antialias: true, alpha: true, powerPreference: "low-power", preserveDrawingBuffer: true }}
+      onCreated={({ gl }) => {
+        gl.toneMapping = ACESFilmicToneMapping;
+        gl.toneMappingExposure = 1.1;
+      }}
+    >
+      <Studio />
+      {product ? <Turntable key={`${product.id}:${product.custom?.updatedAt ?? 0}`} product={product} /> : null}
+    </Canvas>
   );
 }
 

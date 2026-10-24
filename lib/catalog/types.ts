@@ -79,6 +79,8 @@ export type ModelKind =
   | "mushroomLamp"
   | "cloudLight"
   | "checkerRug"
+  /** A user-made item: their own photo, or a plain shape. See CustomSpec. */
+  | "custom"
   /* ---- furniture: the things already in the room ---- */
   | "bed"
   | "desk"
@@ -145,6 +147,35 @@ export interface Product {
    * shop, never recommended, and has no price shown.
    */
   isFurniture?: boolean;
+  /** Present on items the user made themselves rather than catalog products. */
+  custom?: CustomSpec;
+}
+
+/** How a user-made item looks in 3D. */
+export type CustomStyle =
+  /** A flat cutout — right for posters, prints, signs. */
+  | "flat"
+  /** A cutout with real thickness, like a card standee. */
+  | "thick"
+  /** A thick cutout that turns to face the viewer, so it never shows its edge. */
+  | "facing"
+  /** A rounded solid puffed out of the photo's silhouette — reads as 3D from any side. */
+  | "sculpted";
+
+export type CustomShape = "box" | "cylinder" | "sphere";
+
+export interface CustomSpec {
+  /** Background-removed PNG data URL. Absent for plain shapes. */
+  image?: string;
+  style: CustomStyle;
+  /** Used when there is no image. */
+  shape?: CustomShape;
+  finish?: "matte" | "gloss" | "metal" | "wood" | "fabric";
+  /** Where the image was imported from, shown as provenance. */
+  sourceUrl?: string;
+  sourceSite?: string;
+  createdAt: number;
+  updatedAt: number;
 }
 
 export interface CatalogFilter {

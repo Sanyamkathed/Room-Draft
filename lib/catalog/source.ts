@@ -8,6 +8,7 @@
  * (`defaultCatalogSource`) and nothing else.
  */
 
+import { customById } from "./custom";
 import { FURNITURE, FURNITURE_BY_ID } from "./furniture";
 import { PRODUCTS, PRODUCTS_BY_ID } from "./seed";
 import type { CatalogFilter, CatalogSource, Product } from "./types";
@@ -32,6 +33,8 @@ export const ALL_ITEMS: Product[] = [...PRODUCTS, ...FURNITURE];
  * is wired up.
  */
 export function marketplaceUrl(product: Product): string {
+  // A user's own item is for visualising only — it never links to a shop.
+  if (product.custom) return "";
   const tag = process.env.NEXT_PUBLIC_AMAZON_ASSOCIATE_TAG;
   const params = new URLSearchParams({ k: product.query });
   if (tag) params.set("tag", tag);
@@ -101,7 +104,7 @@ export const defaultCatalogSource: CatalogSource = new LocalCatalogSource();
 
 /** Synchronous access for the 3D layer, which cannot await inside a frame. */
 export function productById(id: string): Product | undefined {
-  return PRODUCTS_BY_ID.get(id) ?? FURNITURE_BY_ID.get(id);
+  return PRODUCTS_BY_ID.get(id) ?? FURNITURE_BY_ID.get(id) ?? customById(id);
 }
 
 export function formatINR(value: number): string {

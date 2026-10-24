@@ -1,7 +1,19 @@
 "use client";
 
 import * as React from "react";
-import { ChevronLeft, Grip, MousePointerSquareDashed, Plus, Search, Sofa, Sparkles, X } from "lucide-react";
+import {
+  ChevronLeft,
+  Grip,
+  MousePointerSquareDashed,
+  Pencil,
+  Plus,
+  Search,
+  Sofa,
+  Sparkles,
+  Wand2,
+  X,
+} from "lucide-react";
+import { useCustomProducts } from "@/lib/catalog/custom";
 import { FURNITURE, FURNITURE_GROUPS } from "@/lib/catalog/furniture";
 import { PRODUCTS, PRODUCT_COUNT } from "@/lib/catalog/seed";
 import { formatDims, formatINR } from "@/lib/catalog/source";
@@ -12,6 +24,7 @@ import { productById } from "@/lib/catalog/source";
 import { useStudio } from "@/lib/store/studio";
 import { Chip, IconButton } from "@/components/ui/primitives";
 import { cn } from "@/lib/utils/cn";
+import { CustomItemDialog } from "./CustomItemDialog";
 import { HoverPreview } from "./HoverPreview";
 import { ProductThumb } from "./ProductThumb";
 
@@ -63,7 +76,10 @@ export function LeftPanel({ onTrace }: { onTrace?: () => void }) {
   }, []);
   React.useEffect(() => () => clearHover(), [clearHover]);
 
-  const [category, setCategory] = React.useState<CategoryId | "all" | "for-you">("all");
+  const mine = useCustomProducts();
+  const [builder, setBuilder] = React.useState<Product | "new" | null>(null);
+
+  const [category, setCategory] = React.useState<CategoryId | "all" | "for-you" | "mine">("all");
   const [query, setQuery] = React.useState("");
 
   const list = React.useMemo(() => {
@@ -79,18 +95,20 @@ export function LeftPanel({ onTrace }: { onTrace?: () => void }) {
 
     // Furniture is what is ALREADY in the room, so it lives in its own tab
     // rather than mixed into things to buy.
-    const pool = category === "furniture" ? FURNITURE : PRODUCTS;
+    // The user's own items lead "All" and appear in their category's tab too.
+    const pool =
+      category === "furniture" ? FURNITURE : category === "mine" ? mine : [...mine, ...PRODUCTS];
 
     const q = query.trim().toLowerCase();
     return pool.filter((p) => {
-      if (category !== "all" && category !== "furniture" && p.category !== category) return false;
+      if (category !== "all" && category !== "furniture" && category !== "mine" && p.category !== category) return false;
       if (!q) return true;
       const hay = [p.name, p.brand, p.subcategory, ...p.tags, ...p.aesthetics]
         .join(" ")
         .toLowerCase();
       return q.split(/\s+/).every((t) => hay.includes(t));
     });
-  }, [category, query, items, project?.aesthetic]);
+  }, [category, query, items, project?.aesthetic, mine]);
 
   /** Click-to-add: let the planner find a spot the room actually accepts. */
   const quickAdd = React.useCallback(
@@ -150,6 +168,10 @@ export function LeftPanel({ onTrace }: { onTrace?: () => void }) {
         <Chip active={category === "all"} onClick={() => setCategory("all")}>
           All
         </Chip>
+        <Chip active={category === "mine"} onClick={() => setCategory("mine")}>
+          <Wand2 className="size-3" />
+          My items{mine.length ? ` · ${mine.length}` : ""}
+        </Chip>
         <Chip active={category === "furniture"} onClick={() => setCategory("furniture")}>
           <Sofa className="size-3" />
           Your room
@@ -179,6 +201,24 @@ export function LeftPanel({ onTrace }: { onTrace?: () => void }) {
         </div>
       )}
 
+      {(category === "mine" || category === "all") && (
+        <div className="px-4 pb-3">
+          {category === "mine" && (
+            <p className="mb-2.5 text-[11.5px] leading-relaxed text-chalk-4">
+              Anything from Pinterest, a shop listing or your own photo — at its
+              real size, saved on this device.
+            </p>
+          )}
+          <button
+            onClick={() => setBuilder("new")}
+            className="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-[10px] border border-accent/35 bg-accent/10 text-[12.5px] font-medium text-accent transition-colors hover:bg-accent/18"
+          >
+            <Wand2 className="size-3.5" />
+            Make your own item
+          </button>
+        </div>
+      )}
+
       {category === "for-you" && (
         <p className="px-4 pb-2 text-[11.5px] leading-relaxed text-chalk-4">
           {project?.aesthetic
@@ -190,7 +230,9 @@ export function LeftPanel({ onTrace }: { onTrace?: () => void }) {
       <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4" onScroll={clearHover}>
         {list.length === 0 ? (
           <p className="px-2 py-10 text-center text-[13px] text-chalk-4">
-            Nothing matches “{query}”.
+            {category === "mine" && !query
+              ? "Nothing here yet — make your first item above."
+              : `Nothing matches “${query}”.`}
           </p>
         ) : (
           <ul className="space-y-1">
@@ -232,9 +274,9 @@ export function LeftPanel({ onTrace }: { onTrace?: () => void }) {
                     </p>
                     <p className="mt-0.5 truncate text-[11px] text-chalk-4">{p.brand}</p>
                     <div className="mt-1 flex items-center gap-2">
-                      {p.isFurniture ? (
+                      {p.isFurniture || (p.custom && !p.price) ? (
                         <span className="text-[11.5px] font-medium text-chalk-3">
-                          Already yours
+                          {p.isFurniture ? "Already yours" : "Your item"}
                         </span>
                       ) : (
                         <span className="text-[12px] font-semibold text-chalk-2">
@@ -248,7 +290,22 @@ export function LeftPanel({ onTrace }: { onTrace?: () => void }) {
                   </div>
 
                   <div className="flex shrink-0 flex-col items-center gap-1">
-                    <Grip className="size-3.5 text-chalk-4 opacity-0 transition-opacity group-hover:opacity-100" />
+                    {p.custom ? (
+                      <button
+                        aria-label={`Edit ${p.name}`}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          clearHover();
+                          setBuilder(p);
+                        }}
+                        className="grid size-6 place-items-center rounded-[8px] text-chalk-4 transition-colors hover:bg-white/8 hover:text-chalk"
+                      >
+                        <Pencil className="size-3" />
+                      </button>
+                    ) : (
+                      <Grip className="size-3.5 text-chalk-4 opacity-0 transition-opacity group-hover:opacity-100" />
+                    )}
                     <button
                       aria-label={`Add ${p.name} to room`}
                       onPointerDown={(e) => e.stopPropagation()}
@@ -285,8 +342,20 @@ export function LeftPanel({ onTrace }: { onTrace?: () => void }) {
         )}
       </footer>
 
+      {builder ? (
+        <CustomItemDialog
+          initial={builder === "new" ? undefined : builder}
+          onClose={() => setBuilder(null)}
+          onSaved={(product, place) => {
+            setBuilder(null);
+            setCategory("mine");
+            if (place) quickAdd(product);
+          }}
+        />
+      ) : null}
+
       <HoverPreview
-        product={hover && !draft ? hover.product : null}
+        product={hover && !draft && !builder ? hover.product : null}
         anchor={hover && !draft ? { y: hover.y, x: hover.x } : null}
       />
     </aside>
