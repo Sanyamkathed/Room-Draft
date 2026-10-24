@@ -17,11 +17,13 @@ import {
   SURFACE_NORMALS,
   WALL_SURFACES,
   boxesOverlap,
+  isWallSurface,
   isFloorCovering,
   itemSize,
   localBox,
   overlapDepths,
   stackSurface,
+  wallYaw,
   worldBox,
 } from "./transform";
 import type {
@@ -618,15 +620,51 @@ export function resolvePlacement(
   let point: Vec3 | null = null;
 
   // Stacking: dropping onto another object's top face.
+  //
+  // Any part of a desk counts as aiming at the desk — its front, its legs, the
+  // books already on it. Requiring the cursor to be on the top face itself
+  // makes a 2cm sliver the only target from a seated eye height, and missing
+  // it drops the lamp on the floor and shoves it out from under the desk.
   if (wantsAnyHorizontal && ctx.hit?.itemId) {
-    const host = ctx.items.find((i) => i.id === ctx.hit!.itemId);
-    const hostProduct = host ? productById(host.productId) : undefined;
-    const top = host && hostProduct ? stackSurface(host, hostProduct) : null;
-    if (host && top && ctx.hit.normal[1] > 0.5) {
-      supportId = host.id;
+    const host = stackHostFor(ctx.hit.itemId, ctx.items);
+    if (host) {
+      const { top } = host;
+      supportId = host.item.id;
       surfaceY = top.y;
       bounds = { min: top.min, max: top.max };
-      point = ctx.hit.point;
+      point = pointOnTop(ctx.hit, ctx.ray, top);
+      outlineTop(top, guides);
+    }
+  }
+
+  // Shelf magnet: aiming at the wall just above (or at) a shelf means the
+  // shelf. A floating shelf is 2-4cm thick and seen edge-on from most angles;
+  // asking people to hit that sliver is what makes shelves feel impossible.
+  if (wantsAnyHorizontal && !point && ctx.hit?.surfaceId && isWallSurface(ctx.hit.surfaceId)) {
+    const shelf = shelfNear(ctx.hit.point, ctx.items);
+    if (shelf) {
+      supportId = shelf.item.id;
+      surfaceY = shelf.top.y;
+      bounds = { min: shelf.top.min, max: shelf.top.max };
+      point = [
+        Math.max(shelf.top.min[0], Math.min(shelf.top.max[0], ctx.hit.point[0])),
+        shelf.top.y,
+        Math.max(shelf.top.min[1], Math.min(shelf.top.max[1], ctx.hit.point[2])),
+      ];
+      outlineTop(shelf.top, guides);
+    }
+  }
+
+  // Something new set down on a wall shelf faces out into the room, the way
+  // anyone would put it there — not sideways because the shelf is on the left
+  // wall. Moving an existing item keeps the turn the user already gave it.
+  let itemYaw = yaw;
+  if (supportId && !ctx.id) {
+    const host = ctx.items.find((i) => i.id === supportId);
+    const hostProduct = host ? productById(host.productId) : undefined;
+    if (host && hostProduct?.mount === "wall" && host.surface && isWallSurface(host.surface)) {
+      itemYaw = wallYaw(SURFACE_NORMALS[host.surface]);
+      base.yaw = itemYaw;
     }
   }
 
@@ -647,7 +685,13 @@ export function resolvePlacement(
   }
 
   const [iw, , id] = itemSize(product, scale, ctx.size);
-  const [hx, hz] = rotatedHalfExtents(iw, id, yaw);
+  const [fullHx, fullHz] = rotatedHalfExtents(iw, id, itemYaw);
+  // On furniture and shelves a little overhang is normal — a plant pot wider
+  // than a 13cm shelf still sits on it. A quarter of the footprint may hang
+  // past the edge; the floor needs no such allowance.
+  const overhang = supportId ? 0.75 : 1;
+  const hx = fullHx * overhang;
+  const hz = fullHz * overhang;
 
   let x = ctx.gridSnap ? snapToGrid(point[0], grid) : point[0];
   let z = ctx.gridSnap ? snapToGrid(point[2], grid) : point[2];
@@ -732,6 +776,128 @@ export function resolvePlacement(
     guides,
     stacked: supportId !== null,
   };
+}
+
+type TopFace = NonNullable<ReturnType<typeof stackSurface>>;
+
+/**
+ * The object that would actually carry something dropped on `itemId`.
+ *
+ * A figure or a stack of books is not a surface, but it is standing on one —
+ * so aiming at the clutter on a desk means aiming at the desk.
+ */
+function stackHostFor(
+  itemId: string,
+  items: PlacedItem[],
+): { item: PlacedItem; top: TopFace } | null {
+  let current = items.find((i) => i.id === itemId);
+  for (let depth = 0; current && depth < 8; depth++) {
+    const product = productById(current.productId);
+    const top = product ? stackSurface(current, product) : null;
+    if (top) return { item: current, top };
+    const below: string | null = current.supportId;
+    current = below ? items.find((i) => i.id === below) : undefined;
+  }
+  return null;
+}
+
+/** Where on a top face the cursor means, wherever on its host it landed. */
+function pointOnTop(hit: RayHit, ray: Ray | null, top: TopFace): Vec3 {
+  if (hit.normal[1] > 0.5 && Math.abs(hit.point[1] - top.y) < 0.03) return hit.point;
+
+  // Through the plane of the top, if the ray crosses it near the host. From
+  // below the top (a low camera looking at a desk's front) the crossing is
+  // behind the desk or behind the camera, so the hit itself is the better cue.
+  const MARGIN = 0.3;
+  const p = ray ? rayPlaneY(ray, top.y) : null;
+  const src =
+    p &&
+    p[0] > top.min[0] - MARGIN &&
+    p[0] < top.max[0] + MARGIN &&
+    p[2] > top.min[1] - MARGIN &&
+    p[2] < top.max[1] + MARGIN
+      ? p
+      : hit.point;
+
+  return [
+    Math.max(top.min[0], Math.min(top.max[0], src[0])),
+    top.y,
+    Math.max(top.min[1], Math.min(top.max[1], src[2])),
+  ];
+}
+
+/** Outline the surface an item is about to land on, so the target is never a guess. */
+/**
+ * A wall-mounted shelf the cursor is effectively pointing at: the hit is on
+ * the same wall, within the shelf's span, and somewhere from just under the
+ * board to a hand-height above it. The nearest board below the cursor wins.
+ */
+function shelfNear(p: Vec3, items: PlacedItem[]): { item: PlacedItem; top: TopFace } | null {
+  let best: { item: PlacedItem; top: TopFace; dy: number } | null = null;
+  for (const it of items) {
+    const prod = productById(it.productId);
+    if (!prod || prod.mount !== "wall") continue;
+    const top = stackSurface(it, prod);
+    if (!top) continue;
+    const M = 0.06;
+    const inX = p[0] > top.min[0] - M && p[0] < top.max[0] + M;
+    const inZ = p[2] > top.min[1] - M && p[2] < top.max[1] + M;
+    const dy = p[1] - top.y;
+    if (!inX || !inZ || dy < -0.06 || dy > 0.45) continue;
+    if (!best || Math.abs(dy) < Math.abs(best.dy)) best = { item: it, top, dy };
+  }
+  return best;
+}
+
+function outlineTop(top: TopFace, guides: AlignmentGuide[]) {
+  const y = top.y + 0.003;
+  const [x0, z0] = top.min;
+  const [x1, z1] = top.max;
+  guides.push(
+    { axis: "y", value: z0, from: [x0, y, z0], to: [x1, y, z0] },
+    { axis: "y", value: z1, from: [x0, y, z1], to: [x1, y, z1] },
+    { axis: "y", value: x0, from: [x0, y, z0], to: [x0, y, z1] },
+    { axis: "y", value: x1, from: [x1, y, z0], to: [x1, y, z1] },
+  );
+}
+
+/**
+ * Put a product on a specific surface — the selected shelf or desk — at the
+ * first free spot along it, without the user having to aim.
+ *
+ * Tries the middle first, then works outward along the long side and across
+ * the short one, and returns the first placement the resolver accepts. Null
+ * when the host is not a surface or the product does not stand on surfaces.
+ */
+export function placeOnSurface(
+  product: Product,
+  hostId: string,
+  ctx: Omit<ResolveContext, "hit" | "ray">,
+): PlacementResult | null {
+  if (product.mount !== "tabletop") return null;
+  const host = stackHostFor(hostId, ctx.items);
+  if (!host) return null;
+  const { top } = host;
+  const cx = (top.min[0] + top.max[0]) / 2;
+  const cz = (top.min[1] + top.max[1]) / 2;
+  const spanX = top.max[0] - top.min[0];
+  const spanZ = top.max[1] - top.min[1];
+  const along = spanX >= spanZ ? 0 : 2;
+
+  const offsets = [0, 0.25, -0.25, 0.5, -0.5, 0.75, -0.75, 0.9, -0.9];
+  for (const f of offsets) {
+    for (const g of [0, 0.3, -0.3]) {
+      const x = along === 0 ? cx + (f * spanX) / 2 : cx + (g * spanX) / 2;
+      const z = along === 2 ? cz + (f * spanZ) / 2 : cz + (g * spanZ) / 2;
+      const result = resolvePlacement(product, {
+        ...ctx,
+        hit: { point: [x, top.y, z], normal: [0, 1, 0], itemId: host.item.id },
+        ray: null,
+      });
+      if (result?.valid) return result;
+    }
+  }
+  return null;
 }
 
 /* ------------------------------------------------------------------ */

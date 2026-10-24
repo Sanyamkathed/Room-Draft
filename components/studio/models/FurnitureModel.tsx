@@ -3,15 +3,27 @@
 import * as React from "react";
 import { DoubleSide, type Texture } from "three";
 import type { Product } from "@/lib/catalog/types";
-import { M, seededRandom } from "./shapes";
+import {
+  BarPull,
+  type BoxPart,
+  DrawerFront,
+  FinishMaterial,
+  Leg,
+  MergedBoxes,
+  Slab,
+  useSeeded,
+} from "./finish";
+import { M } from "./shapes";
 
 /**
  * The furniture already in the room.
  *
- * Low-poly on purpose. These are stand-ins for objects the user can see in
- * their own photo — their job is to occupy the right VOLUME so decor collides
- * with them and rests on them, not to be admired. Detail goes into the decor
- * the user is actually shopping for.
+ * Their first job is to occupy the right VOLUME so decor collides with them
+ * and rests on them. Their second is to look like furniture: a lamp on a grey
+ * box reads as a mock-up, a lamp on a desk with a drawer pedestal and a grained
+ * top reads as a room. So edges are softened, timber gets grain, upholstery
+ * gets weave, and each piece carries the one or two details — drawer gaps,
+ * door panels, a tufted headboard — that name it at a glance.
  *
  * Everything is authored to its product dimensions, where height is the
  * SURFACE height: a bed is 50cm because that is where a book would land. Parts
@@ -64,19 +76,7 @@ function Panel({
   rough?: number;
 }) {
   return (
-    <mesh position={position} castShadow receiveShadow>
-      <boxGeometry args={args} />
-      <meshStandardMaterial color={colour} roughness={rough} metalness={0.04} />
-    </mesh>
-  );
-}
-
-function Handle({ position, length }: { position: [number, number, number]; length: number }) {
-  return (
-    <mesh position={position} rotation={[0, 0, Math.PI / 2]} castShadow>
-      <cylinderGeometry args={[0.008, 0.008, length, 8]} />
-      <meshStandardMaterial color="#9aa0a6" roughness={0.3} metalness={0.85} />
-    </mesh>
+    <Slab args={args} position={position} colour={colour} roughness={rough} radius={0.005} />
   );
 }
 
@@ -88,50 +88,95 @@ function Bed({ product, traceTexture }: FurnitureProps) {
   const d = M(product.dims.d);
   const [linen, frame] = product.palette;
 
-  const frameH = h * 0.5;
-  const mattressH = h - frameH;
+  const legH = 0.08;
+  const railH = h * 0.36;
+  const railTop = legH + railH;
+  const mattressH = h - railTop + 0.02;
+  const tufts = Math.max(3, Math.round(w / 0.3));
 
   return (
     <group>
-      <Panel args={[w, frameH, d]} position={[0, frameH / 2, 0]} colour={frame} />
-      <Panel
-        args={[w * 0.98, mattressH, d * 0.98]}
-        position={[0, frameH + mattressH / 2, 0]}
-        colour={linen}
-        rough={0.94}
-      />
-
-      {/* Duvet over the lower two-thirds, slightly proud of the mattress */}
-      <mesh position={[0, h + 0.012, d * 0.16]} castShadow receiveShadow>
-        <boxGeometry args={[w * 0.99, 0.05, d * 0.66]} />
-        <meshStandardMaterial color={linen} roughness={0.98} />
-      </mesh>
-
-      {/* Pillows at the head end */}
-      {w > M(110) ? (
-        [-1, 1].map((s) => (
-          <mesh
-            key={s}
-            position={[s * w * 0.24, h + 0.045, -d * 0.38]}
-            castShadow
-          >
-            <boxGeometry args={[w * 0.4, 0.09, d * 0.14]} />
-            <meshStandardMaterial color="#f2efe8" roughness={0.96} />
-          </mesh>
-        ))
-      ) : (
-        <mesh position={[0, h + 0.045, -d * 0.38]} castShadow>
-          <boxGeometry args={[w * 0.72, 0.09, d * 0.14]} />
-          <meshStandardMaterial color="#f2efe8" roughness={0.96} />
-        </mesh>
+      {/* Frame: legs, side rails and a footboard lip */}
+      {([-1, 1] as const).map((sx) =>
+        ([-1, 1] as const).map((sz) => (
+          <Leg
+            key={`${sx}${sz}`}
+            position={[sx * (w / 2 - 0.05), legH / 2, sz * (d / 2 - 0.05)]}
+            height={legH}
+            top={0.022}
+            bottom={0.016}
+            colour={frame}
+          />
+        )),
       )}
+      <Slab args={[w, railH, d]} position={[0, legH + railH / 2, 0]} colour={frame} radius={0.012} />
 
-      {/* Headboard rises past the box on purpose — see the module note */}
-      <Panel
-        args={[w, h * 1.5, 0.05]}
-        position={[0, h * 0.75, -d / 2 - 0.02]}
-        colour={frame}
+      {/* Mattress with a soft, rounded edge */}
+      <Slab
+        args={[w * 0.97, mattressH, d * 0.97]}
+        position={[0, railTop + mattressH / 2 - 0.02, 0.005]}
+        colour="#f1ede6"
+        finish="fabric"
+        radius={0.04}
       />
+
+      {/* Duvet draped over the lower two-thirds, folded back at the top */}
+      <Slab
+        args={[w * 1.0, 0.045, d * 0.64]}
+        position={[0, h + 0.008, d * 0.17]}
+        colour={linen}
+        finish="fabric"
+        radius={0.02}
+      />
+      <Slab
+        args={[w * 1.0, 0.05, 0.12]}
+        position={[0, h + 0.014, -d * 0.13]}
+        colour={linen}
+        finish="fabric"
+        radius={0.024}
+      />
+      {/* Duvet hangs a little over each side */}
+      {([-1, 1] as const).map((s) => (
+        <Slab
+          key={s}
+          args={[0.025, mattressH * 0.8, d * 0.64]}
+          position={[s * (w / 2 + 0.006), h - mattressH * 0.35, d * 0.17]}
+          colour={linen}
+          finish="fabric"
+          radius={0.01}
+        />
+      ))}
+
+      {/* Pillows: soft, slightly squashed */}
+      {(w > M(110) ? [-1, 1] : [0]).map((s) => (
+        <mesh
+          key={s}
+          position={[s * w * 0.23, h + 0.05, -d * 0.39]}
+          scale={[w > M(110) ? w * 0.4 : w * 0.7, 0.11, d * 0.13]}
+          castShadow
+          receiveShadow
+        >
+          <sphereGeometry args={[0.5, 24, 14]} />
+          <FinishMaterial colour="#f6f3ee" finish="fabric" />
+        </mesh>
+      ))}
+
+      {/* Upholstered, tufted headboard — rises past the box on purpose */}
+      <Slab
+        args={[w + 0.04, h * 1.55, 0.07]}
+        position={[0, h * 0.78, -d / 2 - 0.03]}
+        colour={frame}
+        radius={0.03}
+      />
+      {Array.from({ length: tufts }).map((_, i) => (
+        <mesh
+          key={i}
+          position={[(i - (tufts - 1) / 2) * (w / tufts), h * 1.2, -d / 2 + 0.006]}
+        >
+          <sphereGeometry args={[0.011, 8, 6]} />
+          <meshStandardMaterial color={frame} roughness={0.5} />
+        </mesh>
+      ))}
 
       <TraceFace width={w} height={h} z={d / 2 + 0.004} texture={traceTexture} />
     </group>
@@ -143,30 +188,67 @@ function Desk({ product, traceTexture }: FurnitureProps) {
   const h = M(product.dims.h);
   const d = M(product.dims.d);
   const [top, leg] = product.palette;
-  const slab = 0.035;
+  const slab = 0.03;
+  const legW = 0.04;
+  const legC = leg ?? top;
+  const pedestal = w >= 1.0;
+  const pedW = Math.min(0.42, w * 0.32);
 
   return (
     <group>
-      <Panel args={[w, slab, d]} position={[0, h - slab / 2, 0]} colour={top} rough={0.55} />
+      {/* Top: rounded edges, grain where the colour is timber */}
+      <Slab args={[w, slab, d]} position={[0, h - slab / 2, 0]} colour={top} radius={0.008} />
 
+      {/* Apron rails under the top */}
+      <Slab args={[w - legW * 2, 0.06, 0.018]} position={[0, h - slab - 0.03, -d / 2 + 0.03]} colour={legC} radius={0.004} />
+      {([-1, 1] as const).map((s) => (
+        <Slab
+          key={`r${s}`}
+          args={[0.018, 0.06, d - 0.08]}
+          position={[s * (w / 2 - 0.035), h - slab - 0.03, 0]}
+          colour={legC}
+          radius={0.004}
+        />
+      ))}
+
+      {/* Legs, slightly tapered */}
       {([-1, 1] as const).map((sx) =>
-        ([-1, 1] as const).map((sz) => (
-          <Panel
-            key={`${sx}${sz}`}
-            args={[0.05, h - slab, 0.05]}
-            position={[sx * (w / 2 - 0.05), (h - slab) / 2, sz * (d / 2 - 0.05)]}
-            colour={leg ?? top}
-            rough={0.45}
-          />
-        )),
+        ([-1, 1] as const).map((sz) =>
+          pedestal && sx === 1 ? null : (
+            <Slab
+              key={`${sx}${sz}`}
+              args={[legW, h - slab, legW]}
+              position={[sx * (w / 2 - 0.035), (h - slab) / 2, sz * (d / 2 - 0.035)]}
+              colour={legC}
+              radius={0.008}
+            />
+          ),
+        ),
       )}
 
+      {/* Drawer pedestal on the right, the way most study desks are built */}
+      {pedestal ? (
+        <group position={[w / 2 - pedW / 2 - 0.01, 0, 0]}>
+          <Slab args={[pedW, h - slab, d - 0.04]} position={[0, (h - slab) / 2, 0]} colour={top} radius={0.006} />
+          {[0, 1, 2].map((i) => {
+            const fh = (h - slab - 0.06) / 3 - 0.012;
+            const y = 0.03 + fh / 2 + i * (fh + 0.012) + 0.006;
+            return (
+              <DrawerFront
+                key={i}
+                width={pedW - 0.03}
+                height={fh}
+                y={y}
+                z={(d - 0.04) / 2}
+                colour={legC}
+              />
+            );
+          })}
+        </group>
+      ) : null}
+
       {/* Modesty panel — also stops you seeing straight through the desk */}
-      <Panel
-        args={[w * 0.9, h * 0.32, 0.02]}
-        position={[0, h * 0.52, -d / 2 + 0.06]}
-        colour={leg ?? top}
-      />
+      <Slab args={[w * 0.86, h * 0.34, 0.016]} position={[pedestal ? -pedW / 2 : 0, h * 0.62, -d / 2 + 0.05]} colour={legC} radius={0.004} />
 
       <TraceFace width={w} height={h} z={d / 2 + 0.004} texture={traceTexture} />
     </group>
@@ -178,27 +260,44 @@ function Wardrobe({ product, traceTexture }: FurnitureProps) {
   const h = M(product.dims.h);
   const d = M(product.dims.d);
   const [body, trim] = product.palette;
+  const doorC = trim ?? body;
+  const plinth = 0.07;
+  const crown = 0.04;
+  const doors = w > 1.3 ? 3 : 2;
+  const doorW = (w - 0.03) / doors;
+  const doorH = h - plinth - crown - 0.02;
 
   return (
     <group>
-      <Panel args={[w, h, d]} position={[0, h / 2, 0]} colour={body} />
+      <Slab args={[w - 0.02, plinth, d - 0.04]} position={[0, plinth / 2, -0.01]} colour={doorC} radius={0.004} />
+      <Slab args={[w, h - plinth - crown, d - 0.02]} position={[0, plinth + (h - plinth - crown) / 2, -0.01]} colour={body} radius={0.008} />
+      <Slab args={[w + 0.02, crown, d + 0.01]} position={[0, h - crown / 2, 0]} colour={body} radius={0.008} />
 
-      {/* Two doors with a centre reveal */}
-      {([-1, 1] as const).map((s) => (
-        <Panel
-          key={s}
-          args={[w / 2 - 0.012, h - 0.04, 0.018]}
-          position={[s * (w / 4), h / 2, d / 2 + 0.009]}
-          colour={trim ?? body}
-          rough={0.5}
-        />
-      ))}
-      {([-1, 1] as const).map((s) => (
-        <mesh key={`h${s}`} position={[s * 0.03, h * 0.5, d / 2 + 0.03]} castShadow>
-          <cylinderGeometry args={[0.008, 0.008, h * 0.22, 8]} />
-          <meshStandardMaterial color="#9aa0a6" roughness={0.3} metalness={0.85} />
-        </mesh>
-      ))}
+      {Array.from({ length: doors }).map((_, i) => {
+        const x = -w / 2 + 0.015 + doorW * (i + 0.5);
+        const cy = plinth + 0.01 + doorH / 2;
+        return (
+          <group key={i} position={[x, 0, d / 2 - 0.01]}>
+            {/* Door leaf */}
+            <Slab args={[doorW - 0.008, doorH, 0.02]} position={[0, cy, 0.01]} colour={doorC} radius={0.004} />
+            {/* Raised inner panels, so the doors read as joinery */}
+            {[0.27, 0.73].map((f, j) => (
+              <Slab
+                key={j}
+                args={[doorW - 0.09, doorH * (j === 0 ? 0.42 : 0.42), 0.008]}
+                position={[0, plinth + 0.01 + doorH * f, 0.024]}
+                colour={doorC}
+                radius={0.003}
+              />
+            ))}
+            <BarPull
+              position={[(i % 2 === 0 ? 1 : -1) * (doorW / 2 - 0.04), cy, 0.02]}
+              length={0.22}
+              vertical
+            />
+          </group>
+        );
+      })}
 
       <TraceFace width={w} height={h} z={d / 2 + 0.05} texture={traceTexture} />
     </group>
@@ -212,59 +311,61 @@ function BookshelfTall({ product, traceTexture }: FurnitureProps) {
   const [body, trim] = product.palette;
   const t = 0.022;
   const shelves = Math.max(3, Math.round(h / 0.36));
-  const rnd = React.useMemo(() => seededRandom(product.id), [product.id]);
+  const rnd = useSeeded(product.id);
+
+  const books = React.useMemo(() => {
+    const spines = ["#6b2b2b", "#2a3a5a", "#c9a227", "#3f6b46", "#e8e2d4", "#4a3b5c", "#b8613a"];
+    return Array.from({ length: shelves }).map(() => {
+      const out: { x: number; bw: number; bh: number; c: string; lean: number }[] = [];
+      let x = 0;
+      const limit = (w - t * 2) * (0.45 + rnd() * 0.45);
+      while (x < limit) {
+        const bw = 0.018 + rnd() * 0.02;
+        out.push({ x: x + bw / 2, bw, bh: 0.16 + rnd() * 0.09, c: spines[Math.floor(rnd() * spines.length)], lean: 0 });
+        x += bw + 0.002;
+      }
+      if (out.length && rnd() < 0.5) out[out.length - 1].lean = 0.22;
+      return out;
+    });
+  }, [shelves, w, rnd]);
+
+  const bookParts = React.useMemo(() => {
+    const out: { books: BoxPart[]; bands: BoxPart[] } = { books: [], bands: [] };
+    books.forEach((row, i) => {
+      const y = (i / shelves) * (h - t) + t;
+      for (const b of row) {
+        const x = -w / 2 + t + 0.01 + b.x;
+        // Leaning books pivot on their bottom corner, so lift them by the lean.
+        const lift = Math.sin(b.lean) * b.bw * 0.5;
+        out.books.push({ size: [b.bw, b.bh, d * 0.72], position: [x + Math.sin(b.lean) * b.bh * 0.5, y + b.bh / 2 * Math.cos(b.lean) + lift, 0.01], rotation: [0, 0, -b.lean], colour: b.c });
+        if (b.lean === 0) out.bands.push({ size: [b.bw * 0.8, 0.006, 0.001], position: [x, y + b.bh * 0.8, 0.01 + d * 0.36 + 0.0006] });
+      }
+    });
+    return out;
+  }, [books, shelves, w, h, d, t]);
 
   return (
     <group>
       {([-1, 1] as const).map((s) => (
-        <Panel
-          key={s}
-          args={[t, h, d]}
-          position={[s * (w / 2 - t / 2), h / 2, 0]}
-          colour={body}
-        />
+        <Slab key={s} args={[t, h, d]} position={[s * (w / 2 - t / 2), h / 2, 0]} colour={body} radius={0.004} />
       ))}
-      <Panel args={[w, h, t]} position={[0, h / 2, -d / 2 + t / 2]} colour={trim ?? body} />
+      <Slab args={[w - t * 2, h - t, 0.008]} position={[0, h / 2, -d / 2 + 0.004]} colour={trim ?? body} radius={0.002} />
 
       {Array.from({ length: shelves + 1 }).map((_, i) => {
         const y = (i / shelves) * (h - t) + t / 2;
-        return (
-          <Panel
-            key={i}
-            args={[w - t * 2, t, d - t]}
-            position={[0, y, t / 2]}
-            colour={body}
-          />
-        );
+        return <Slab key={i} args={[w - t * 2, t, d - 0.01]} position={[0, y, 0.005]} colour={body} radius={0.003} />;
       })}
+      {/* Kick plate */}
+      <Slab args={[w - t * 2, 0.06, 0.016]} position={[0, 0.03, d / 2 - 0.012]} colour={body} radius={0.003} />
 
-      {/* A few books, so an empty shelf doesn't read as a broken model */}
-      {Array.from({ length: shelves }).map((_, i) => {
-        const y = (i / shelves) * (h - t) + t / 2;
-        const count = 3 + Math.floor(rnd() * 5);
-        return (
-          <group key={`b${i}`} position={[-w / 2 + t + 0.03, y + t / 2, 0]}>
-            {Array.from({ length: count }).map((__, j) => {
-              const bw = 0.022 + rnd() * 0.016;
-              const bh = 0.17 + rnd() * 0.07;
-              return (
-                <mesh
-                  key={j}
-                  position={[j * 0.042, bh / 2, 0]}
-                  rotation={[0, 0, rnd() < 0.15 ? 0.16 : 0]}
-                  castShadow
-                >
-                  <boxGeometry args={[bw, bh, d * 0.7]} />
-                  <meshStandardMaterial
-                    color={["#6b2b2b", "#2a3a5a", "#c9a227", "#3f6b46", "#e8e2d4"][j % 5]}
-                    roughness={0.85}
-                  />
-                </mesh>
-              );
-            })}
-          </group>
-        );
-      })}
+      {/* Every book on every shelf is one merged mesh, plus one for the gilt
+          spine bands — a full bookcase would otherwise be ~100 draw calls. */}
+      <MergedBoxes parts={bookParts.books}>
+        <meshStandardMaterial vertexColors roughness={0.82} />
+      </MergedBoxes>
+      <MergedBoxes parts={bookParts.bands} castShadow={false}>
+        <meshStandardMaterial color="#d9c27a" roughness={0.4} metalness={0.6} />
+      </MergedBoxes>
 
       <TraceFace width={w} height={h} z={d / 2 + 0.004} texture={traceTexture} />
     </group>
@@ -276,89 +377,121 @@ function Chair({ product }: FurnitureProps) {
   const h = M(product.dims.h);
   const d = M(product.dims.d);
   const [body, accent] = product.palette;
+  const metal = accent ?? body;
+  const seatT = 0.07;
+  const gasH = h - seatT - 0.1;
+
+  // An office chair: five-star base on castors, gas lift, cushioned seat and a
+  // curved backrest — the chair that actually sits at a study desk.
+  return (
+    <group>
+      {Array.from({ length: 5 }).map((_, i) => {
+        const a = (i / 5) * Math.PI * 2;
+        const r = Math.min(w, d) * 0.42;
+        return (
+          <group key={i} rotation={[0, a, 0]}>
+            <Slab args={[0.03, 0.025, r]} position={[0, 0.06, r / 2]} colour={metal} finish="metal" radius={0.008} />
+            <mesh position={[0, 0.025, r]} rotation={[0, 0, Math.PI / 2]} castShadow>
+              <cylinderGeometry args={[0.025, 0.025, 0.022, 14]} />
+              <meshStandardMaterial color="#1a1a1c" roughness={0.6} />
+            </mesh>
+          </group>
+        );
+      })}
+      <Leg position={[0, 0.07 + gasH / 2, 0]} height={gasH} top={0.022} bottom={0.028} colour={metal} finish="metal" />
+
+      {/* Seat */}
+      <Slab args={[w * 0.92, seatT, d * 0.88]} position={[0, h - seatT / 2, 0.01]} colour={body} finish="fabric" radius={0.03} />
+
+      {/* Backrest on a spine, slightly reclined and curved */}
+      <Slab args={[0.05, h * 0.5, 0.025]} position={[0, h + h * 0.12, -d * 0.43]} rotation={[-0.08, 0, 0]} colour={metal} finish="metal" radius={0.01} />
+      <group position={[0, h + h * 0.62, -d * 0.44]} rotation={[-0.1, 0, 0]}>
+        {[-1, 0, 1].map((s) => (
+          <Slab
+            key={s}
+            args={[w * 0.32, h * 0.95, 0.055]}
+            position={[s * w * 0.28, 0, -Math.abs(s) * -0.03]}
+            rotation={[0, -s * 0.28, 0]}
+            colour={body}
+            finish="fabric"
+            radius={0.025}
+          />
+        ))}
+      </group>
+
+      {/* Armrests */}
+      {([-1, 1] as const).map((s) => (
+        <group key={`a${s}`} position={[s * (w * 0.46), h, -d * 0.05]}>
+          <Slab args={[0.03, 0.2, 0.03]} position={[0, 0.1, 0]} colour={metal} finish="metal" radius={0.008} />
+          <Slab args={[0.06, 0.025, d * 0.45]} position={[0, 0.21, 0]} colour="#1f1f22" finish="plastic" radius={0.01} />
+        </group>
+      ))}
+    </group>
+  );
+}
+
+/** Shared carcass for drawer furniture: top overhang, plinth or legs, drawers. */
+function DrawerUnit({
+  product,
+  traceTexture,
+  rows,
+  columns = 1,
+}: FurnitureProps & { rows: number; columns?: number }) {
+  const w = M(product.dims.w);
+  const h = M(product.dims.h);
+  const d = M(product.dims.d);
+  const [body, trim] = product.palette;
+  const front = trim ?? body;
+  const topT = 0.022;
+  const legH = 0.1;
+  const caseH = h - topT - legH;
+  const gap = 0.01;
+  const fh = (caseH - 0.03 - gap * (rows - 1)) / rows;
+  const fw = (w - 0.05 - gap * (columns - 1)) / columns;
 
   return (
     <group>
-      <Panel args={[w * 0.9, 0.06, d * 0.9]} position={[0, h - 0.03, 0]} colour={body} rough={0.85} />
-
+      {/* Splayed mid-century legs */}
       {([-1, 1] as const).map((sx) =>
         ([-1, 1] as const).map((sz) => (
-          <mesh
+          <Leg
             key={`${sx}${sz}`}
-            position={[sx * (w * 0.36), (h - 0.06) / 2, sz * (d * 0.36)]}
-            castShadow
-          >
-            <cylinderGeometry args={[0.016, 0.014, h - 0.06, 8]} />
-            <meshStandardMaterial color={accent ?? body} roughness={0.4} metalness={0.5} />
-          </mesh>
+            position={[sx * (w / 2 - 0.05), legH / 2, sz * (d / 2 - 0.05)]}
+            height={legH + 0.01}
+            top={0.018}
+            bottom={0.011}
+            colour={body}
+            tilt={[sz * 0.08, 0, -sx * 0.08]}
+          />
         )),
       )}
+      <Slab args={[w - 0.02, caseH, d - 0.02]} position={[0, legH + caseH / 2, -0.005]} colour={body} radius={0.006} />
+      <Slab args={[w + 0.01, topT, d + 0.01]} position={[0, h - topT / 2, 0]} colour={body} radius={0.007} />
 
-      {/* Backrest — above the seat box, which is where things actually rest */}
-      <Panel
-        args={[w * 0.86, h * 0.85, 0.05]}
-        position={[0, h + h * 0.42, -d * 0.4]}
-        colour={body}
-        rough={0.85}
-      />
-    </group>
-  );
-}
-
-function Nightstand({ product, traceTexture }: FurnitureProps) {
-  const w = M(product.dims.w);
-  const h = M(product.dims.h);
-  const d = M(product.dims.d);
-  const [body, trim] = product.palette;
-
-  return (
-    <group>
-      <Panel args={[w, h, d]} position={[0, h / 2, 0]} colour={body} />
-      {[0, 1].map((i) => {
-        const y = h * (0.3 + i * 0.38);
-        return (
-          <group key={i}>
-            <Panel
-              args={[w - 0.04, h * 0.3, 0.016]}
-              position={[0, y, d / 2 + 0.008]}
-              colour={trim ?? body}
-              rough={0.5}
+      {Array.from({ length: rows }).map((_, r) =>
+        Array.from({ length: columns }).map((__, c) => (
+          <group key={`${r}${c}`} position={[-w / 2 + 0.025 + fw / 2 + c * (fw + gap), 0, 0]}>
+            <DrawerFront
+              width={fw}
+              height={fh}
+              y={legH + 0.015 + fh / 2 + r * (fh + gap)}
+              z={(d - 0.02) / 2 - 0.005}
+              colour={front}
             />
-            <Handle position={[0, y, d / 2 + 0.026]} length={w * 0.4} />
           </group>
-        );
-      })}
+        )),
+      )}
       <TraceFace width={w} height={h} z={d / 2 + 0.04} texture={traceTexture} />
     </group>
   );
 }
 
-function Dresser({ product, traceTexture }: FurnitureProps) {
-  const w = M(product.dims.w);
-  const h = M(product.dims.h);
-  const d = M(product.dims.d);
-  const [body, trim] = product.palette;
+function Nightstand(props: FurnitureProps) {
+  return <DrawerUnit {...props} rows={2} />;
+}
 
-  return (
-    <group>
-      <Panel args={[w, h, d]} position={[0, h / 2, 0]} colour={body} />
-      {[0, 1, 2].map((i) => {
-        const y = h * (0.19 + i * 0.3);
-        return (
-          <group key={i}>
-            <Panel
-              args={[w - 0.05, h * 0.26, 0.016]}
-              position={[0, y, d / 2 + 0.008]}
-              colour={trim ?? body}
-              rough={0.5}
-            />
-            <Handle position={[0, y, d / 2 + 0.026]} length={w * 0.34} />
-          </group>
-        );
-      })}
-      <TraceFace width={w} height={h} z={d / 2 + 0.04} texture={traceTexture} />
-    </group>
-  );
+function Dresser(props: FurnitureProps) {
+  return <DrawerUnit {...props} rows={3} columns={props.product.dims.w > 90 ? 2 : 1} />;
 }
 
 function TvUnit({ product, traceTexture }: FurnitureProps) {
@@ -366,28 +499,56 @@ function TvUnit({ product, traceTexture }: FurnitureProps) {
   const h = M(product.dims.h);
   const d = M(product.dims.d);
   const [body, trim] = product.palette;
+  const accent = trim ?? body;
+  const legH = h * 0.2;
+  const caseH = h - legH;
+  const t = 0.02;
+  const openW = w * 0.34;
 
   return (
     <group>
-      <Panel args={[w, h * 0.82, d]} position={[0, h * 0.59, 0]} colour={body} />
+      {([-1, 1] as const).map((sx) =>
+        ([-1, 1] as const).map((sz) => (
+          <Leg
+            key={`${sx}${sz}`}
+            position={[sx * (w / 2 - 0.06), legH / 2, sz * (d / 2 - 0.06)]}
+            height={legH}
+            top={0.016}
+            bottom={0.012}
+            colour={accent}
+          />
+        )),
+      )}
+      {/* Carcass */}
+      <Slab args={[w, t, d]} position={[0, h - t / 2, 0]} colour={body} radius={0.006} />
+      <Slab args={[w, t, d]} position={[0, legH + t / 2, 0]} colour={body} radius={0.006} />
       {([-1, 1] as const).map((s) => (
-        <Panel
-          key={s}
-          args={[0.04, h * 0.18, 0.04]}
-          position={[s * (w / 2 - 0.06), h * 0.09, 0]}
-          colour={trim ?? body}
-          rough={0.4}
-        />
+        <Slab key={s} args={[t, caseH, d]} position={[s * (w / 2 - t / 2), legH + caseH / 2, 0]} colour={body} radius={0.004} />
       ))}
+      <Slab args={[w - t * 2, caseH - t * 2, 0.008]} position={[0, legH + caseH / 2, -d / 2 + 0.004]} colour={body} radius={0.002} />
+
+      {/* Open centre bay with a divider shelf, slatted doors either side */}
       {([-1, 1] as const).map((s) => (
-        <Panel
-          key={`d${s}`}
-          args={[w / 2 - 0.03, h * 0.5, 0.014]}
-          position={[s * (w / 4), h * 0.55, d / 2 + 0.007]}
-          colour={trim ?? body}
-          rough={0.45}
-        />
+        <Slab key={`p${s}`} args={[t, caseH - t * 2, d - 0.02]} position={[s * openW / 2, legH + caseH / 2, 0]} colour={body} radius={0.003} />
       ))}
+      <Slab args={[openW - t, t, d - 0.03]} position={[0, legH + caseH / 2, 0]} colour={body} radius={0.003} />
+      {([-1, 1] as const).map((s) => {
+        const doorW = (w - openW) / 2 - t * 1.5;
+        const cx = s * (openW / 2 + doorW / 2 + t * 0.5);
+        const slats = Math.max(6, Math.round(doorW / 0.025));
+        const slatParts: BoxPart[] = Array.from({ length: slats }).map((_, i) => ({
+          size: [doorW / slats - 0.004, caseH - t * 3, 0.008],
+          position: [-doorW / 2 + (i + 0.5) * (doorW / slats), 0, 0.01],
+        }));
+        return (
+          <group key={`d${s}`} position={[cx, legH + caseH / 2, d / 2 - 0.01]}>
+            <Slab args={[doorW, caseH - t * 2.4, 0.014]} colour={accent} radius={0.003} />
+            <MergedBoxes parts={slatParts}>
+              <FinishMaterial colour={accent} />
+            </MergedBoxes>
+          </group>
+        );
+      })}
       <TraceFace width={w} height={h} z={d / 2 + 0.03} texture={traceTexture} />
     </group>
   );
@@ -398,33 +559,65 @@ function Sofa({ product, traceTexture }: FurnitureProps) {
   const h = M(product.dims.h);
   const d = M(product.dims.d);
   const [body, trim] = product.palette;
+  const legH = 0.08;
+  const baseH = h * 0.5;
+  const armW = Math.min(0.18, w * 0.12);
+  const seats = w > 1.7 ? 3 : 2;
+  const seatW = (w - armW * 2) / seats;
+  const backD = d * 0.24;
 
   return (
     <group>
-      <Panel args={[w, h * 0.62, d]} position={[0, h * 0.31, 0]} colour={trim ?? body} rough={0.95} />
+      {([-1, 1] as const).map((sx) =>
+        ([-1, 1] as const).map((sz) => (
+          <Leg
+            key={`${sx}${sz}`}
+            position={[sx * (w / 2 - 0.08), legH / 2, sz * (d / 2 - 0.08)]}
+            height={legH}
+            top={0.018}
+            bottom={0.012}
+            colour={trim ?? "#3a2a1c"}
+            finish="wood"
+          />
+        )),
+      )}
+      {/* Base frame */}
+      <Slab args={[w, baseH - legH, d]} position={[0, legH + (baseH - legH) / 2, 0]} colour={trim ?? body} finish="fabric" radius={0.03} />
 
-      {/* Seat cushions */}
-      {[-1, 1].map((s) => (
-        <mesh key={s} position={[s * w * 0.24, h * 0.78, d * 0.06]} castShadow receiveShadow>
-          <boxGeometry args={[w * 0.46, h * 0.34, d * 0.8]} />
-          <meshStandardMaterial color={body} roughness={0.96} />
-        </mesh>
+      {/* Seat cushions, top face at the product height */}
+      {Array.from({ length: seats }).map((_, i) => (
+        <Slab
+          key={i}
+          args={[seatW - 0.01, h - baseH + 0.02, d - backD - 0.02]}
+          position={[-w / 2 + armW + seatW * (i + 0.5), baseH + (h - baseH) / 2 - 0.01, backD / 2]}
+          colour={body}
+          finish="fabric"
+          radius={0.045}
+        />
       ))}
 
-      {/* Back and arms rise above the seat box */}
-      <Panel
-        args={[w, h * 1.5, d * 0.22]}
-        position={[0, h * 0.9, -d * 0.39]}
-        colour={body}
-        rough={0.96}
-      />
-      {([-1, 1] as const).map((s) => (
-        <Panel
-          key={`a${s}`}
-          args={[d * 0.16, h * 0.95, d]}
-          position={[s * (w / 2 - d * 0.08), h * 0.62, 0]}
+      {/* Back cushions, leaning back slightly */}
+      {Array.from({ length: seats }).map((_, i) => (
+        <Slab
+          key={`b${i}`}
+          args={[seatW - 0.01, h * 1.05, backD]}
+          position={[-w / 2 + armW + seatW * (i + 0.5), h + h * 0.4, -d / 2 + backD / 2 + 0.01]}
+          rotation={[-0.12, 0, 0]}
           colour={body}
-          rough={0.96}
+          finish="fabric"
+          radius={0.05}
+        />
+      ))}
+
+      {/* Rolled arms */}
+      {([-1, 1] as const).map((s) => (
+        <Slab
+          key={`a${s}`}
+          args={[armW, h * 0.9, d]}
+          position={[s * (w / 2 - armW / 2), legH + h * 0.45, 0]}
+          colour={body}
+          finish="fabric"
+          radius={0.06}
         />
       ))}
 

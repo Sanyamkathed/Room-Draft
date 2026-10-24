@@ -5,6 +5,7 @@ import {
   ChevronRight,
   Copy,
   ExternalLink,
+  PackagePlus,
   MousePointer2,
   Ruler,
   Trash2,
@@ -29,6 +30,7 @@ const DEG = 180 / Math.PI;
  */
 export function RightPanel() {
   const setOpen = useStudio((s) => s.setRightPanel);
+  const setLeftOpen = useStudio((s) => s.setLeftPanel);
   const room = useStudio((s) => s.room);
   const updateItem = useStudio((s) => s.updateItem);
   const resolveItem = useStudio((s) => s.resolveItem);
@@ -214,6 +216,25 @@ export function RightPanel() {
           <Divider />
 
           {/* ---------------- Actions ---------------- */}
+          {product.stackable && product.model !== "rug" && product.model !== "checkerRug" ? (
+            <div className="px-4 pt-4">
+              <Button
+                variant="primary"
+                size="sm"
+                className="w-full"
+                onClick={() => {
+                  // The library's "+" now targets this surface. On phones the
+                  // two panels share the bottom of the screen, so this one
+                  // steps aside; the selection itself stays.
+                  setLeftOpen(true);
+                  if (window.matchMedia("(max-width: 767px)").matches) setOpen(false);
+                }}
+              >
+                <PackagePlus className="size-3.5" />
+                Put something on it
+              </Button>
+            </div>
+          ) : null}
           <div className="flex gap-2 px-4 py-4">
             <Button
               variant="secondary"

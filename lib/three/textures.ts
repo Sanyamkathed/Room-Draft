@@ -436,6 +436,74 @@ export function glowTexture(falloff = 2.2): Texture {
 }
 
 /**
+ * Lunar surface for the moon lamp: pale maria, ringed craters, fine grain.
+ *
+ * A moon lamp is a 3D-printed relief, and the relief is the whole product —
+ * a smooth glowing ball reads as a generic globe light. Used as both colour
+ * and bump map, so the craters catch the room's light as well as glowing.
+ */
+export function moonTexture(): Texture {
+  const key = "moon";
+  const hit = cache.get(key);
+  if (hit) return hit;
+
+  const W = 512;
+  const H = 256;
+  const canvas = document.createElement("canvas");
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext("2d")!;
+  const rnd = mulberry(0x6d6f6f6e);
+
+  ctx.fillStyle = "#d9d2c2";
+  ctx.fillRect(0, 0, W, H);
+
+  // Maria: broad, soft, darker patches.
+  for (let i = 0; i < 9; i++) {
+    const x = rnd() * W;
+    const y = H * (0.2 + rnd() * 0.6);
+    const r = 30 + rnd() * 60;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, "rgba(120,112,100,0.55)");
+    g.addColorStop(1, "rgba(120,112,100,0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(x - r, y - r, r * 2, r * 2);
+  }
+
+  // Craters: dark floor, bright rim on one side.
+  for (let i = 0; i < 140; i++) {
+    const x = rnd() * W;
+    const y = rnd() * H;
+    const r = 1.5 + Math.pow(rnd(), 3) * 16;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(95,88,78,${0.25 + rnd() * 0.3})`;
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x - r * 0.15, y - r * 0.15, r, Math.PI * 0.9, Math.PI * 1.9);
+    ctx.strokeStyle = `rgba(250,246,236,${0.35 + rnd() * 0.3})`;
+    ctx.lineWidth = Math.max(0.8, r * 0.22);
+    ctx.stroke();
+  }
+
+  // Grain, so close-ups don't look airbrushed.
+  const img = ctx.getImageData(0, 0, W, H);
+  for (let i = 0; i < img.data.length; i += 4) {
+    const n = (rnd() - 0.5) * 18;
+    img.data[i] += n;
+    img.data[i + 1] += n;
+    img.data[i + 2] += n;
+  }
+  ctx.putImageData(img, 0, 0);
+
+  const tex = new CanvasTexture(canvas);
+  tex.colorSpace = SRGBColorSpace;
+  tex.needsUpdate = true;
+  cache.set(key, tex);
+  return tex;
+}
+
+/**
  * The soft dark patch an object casts where it meets its surface.
  *
  * Directional shadows are deliberately faint over a photo-textured room (the

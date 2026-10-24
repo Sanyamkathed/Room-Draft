@@ -52,7 +52,7 @@ export function itemSize(
   scale: number,
   override?: { w: number; h: number; d: number },
 ): Vec3 {
-  const d = override ?? product.dims;
+  const d = override ?? (product.footprint ? { ...product.dims, ...product.footprint } : product.dims);
   return [(d.w / 100) * scale, (d.h / 100) * scale, (d.d / 100) * scale];
 }
 

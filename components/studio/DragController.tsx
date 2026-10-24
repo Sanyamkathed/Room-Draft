@@ -29,12 +29,14 @@ function findOwner(object: Object3D): {
   itemId?: string;
   surfaceId?: SurfaceId;
   ghost?: boolean;
+  hidden?: boolean;
 } {
   let node: Object3D | null = object;
-  const out: { itemId?: string; surfaceId?: SurfaceId; ghost?: boolean } = {};
+  const out: { itemId?: string; surfaceId?: SurfaceId; ghost?: boolean; hidden?: boolean } = {};
   while (node) {
     const ud = node.userData ?? {};
     if (ud.ghost) out.ghost = true;
+    if (!node.visible) out.hidden = true;
     if (!out.itemId && typeof ud.itemId === "string") out.itemId = ud.itemId;
     if (!out.surfaceId && typeof ud.surfaceId === "string") {
       out.surfaceId = ud.surfaceId as SurfaceId;
@@ -79,6 +81,11 @@ export function DragController() {
         const owner = findOwner(h.object);
         // Never let the preview, or the item being moved, be its own target.
         if (owner.ghost) continue;
+        // three's raycaster ignores `visible`, so the walls and ceiling hidden
+        // for the dollhouse view would otherwise swallow every ray aimed past
+        // them — in orbit and top views, a lamp aimed at a desk would hit an
+        // invisible wall first and land on the floor.
+        if (owner.hidden) continue;
         if (d.itemId && owner.itemId === d.itemId) continue;
         if (!owner.itemId && !owner.surfaceId) continue;
 

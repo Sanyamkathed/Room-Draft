@@ -1,10 +1,16 @@
 "use client";
 
 import * as React from "react";
+import { useFrame } from "@react-three/fiber";
 import {
   AdditiveBlending,
+  BackSide,
+  CatmullRomCurve3,
   DoubleSide,
+  IcosahedronGeometry,
+  Quaternion,
   Shape,
+  SphereGeometry,
   Vector2,
   Vector3,
   type Object3D,
@@ -18,11 +24,13 @@ import {
   canLabelTexture,
   checkerTexture,
   glowTexture,
+  moonTexture,
   photoGridTexture,
   projectionTexture,
   weaveTexture,
 } from "@/lib/three/textures";
 import { FURNITURE_MODELS } from "./FurnitureModel";
+import { FinishMaterial, MergedBoxes, Slab, useSeeded } from "./finish";
 import { M, catenary, leafShape, neonCurve, seededRandom } from "./shapes";
 
 /**
@@ -493,118 +501,480 @@ function Mirror({ product }: ModelProps) {
   );
 }
 
-function Shelf({ product }: ModelProps) {
-  const w = M(product.dims.w);
-  const h = M(product.dims.h);
-  const d = M(product.dims.d);
-  const [top, bracket] = product.palette;
-
-  // Wall-mounted: origin is on the wall, board extends outward along +z.
-  // Its top face at y = +h/2 is what stackSurface() reports, so figures placed
-  // on it land exactly on the board.
-  return (
-    <group>
-      <mesh position={[0, 0, d / 2]} castShadow receiveShadow>
-        <boxGeometry args={[w, h, d]} />
-        <meshStandardMaterial color={top} roughness={0.62} metalness={0.05} />
-      </mesh>
-      {[-1, 1].map((s) => (
-        <mesh
-          key={s}
-          position={[s * (w / 2 - w * 0.12), -h * 0.9, d * 0.34]}
-          castShadow
-        >
-          <boxGeometry args={[h * 0.5, h * 1.6, d * 0.62]} />
-          <meshStandardMaterial color={bracket ?? top} roughness={0.5} metalness={0.35} />
-        </mesh>
-      ))}
-    </group>
-  );
-}
 
 /* ------------------------------------------------------------------ */
 /* Lighting                                                            */
 /* ------------------------------------------------------------------ */
 
+/*
+ * Lamps are lit from inside, which is exactly what makes them hard to draw.
+ * At full emissive strength a shade has no shading left, and bloom turns it
+ * into a flat glowing disc — a sticker of a lamp. So shells here glow only
+ * partly and stay tone-mapped, letting the room's light model their form, and
+ * the real brightness lives in a small bulb core inside them. That is also
+ * how a real lamp photographs: a glowing shade with a hot spot, not a hole.
+ */
+
+/** A shade or vessel lit from within that still reads as a solid. */
+function ShellMaterial({
+  colour,
+  glow,
+  intensity = 0.55,
+  opacity = 1,
+  roughness = 0.45,
+  flat = false,
+  side,
+}: {
+  colour: string;
+  glow: string;
+  intensity?: number;
+  opacity?: number;
+  roughness?: number;
+  flat?: boolean;
+  side?: typeof DoubleSide | typeof BackSide;
+}) {
+  return (
+    <meshStandardMaterial
+      color={colour}
+      emissive={glow}
+      emissiveIntensity={intensity}
+      roughness={roughness}
+      metalness={0}
+      transparent={opacity < 1}
+      opacity={opacity}
+      depthWrite={opacity >= 1}
+      flatShading={flat}
+      side={side}
+    />
+  );
+}
+
+/** The hot core inside a lamp — the only part bright enough to bloom. */
+function Bulb({ colour, radius, position }: { colour: string; radius: number; position: Vec3 }) {
+  return (
+    <mesh position={position}>
+      <sphereGeometry args={[radius, 16, 12]} />
+      <meshBasicMaterial color={colour} toneMapped={false} />
+    </mesh>
+  );
+}
+
+/** A cylinder from one point to another — arms, rods, springs. */
+function Rod({
+  from,
+  to,
+  radius,
+  children,
+}: {
+  from: Vec3;
+  to: Vec3;
+  radius: number;
+  children: React.ReactNode;
+}) {
+  const a = new Vector3(...from);
+  const dir = new Vector3(...to).sub(a);
+  const length = dir.length();
+  const quaternion = new Quaternion().setFromUnitVectors(UP, dir.normalize());
+  const mid = new Vector3(...from).add(new Vector3(...to)).multiplyScalar(0.5);
+  return (
+    <mesh position={mid} quaternion={quaternion} castShadow>
+      <cylinderGeometry args={[radius, radius, length, 10]} />
+      {children}
+    </mesh>
+  );
+}
+
+const UP = new Vector3(0, 1, 0);
+
+/** A surface of revolution from (radius, height) pairs, in metres. */
+function lathe(points: [number, number][]) {
+  return points.map(([r, y]) => new Vector2(Math.max(0.0005, r), y));
+}
+
+/**
+ * Architect desk lamp: weighted base, twin-bar arms with springs, and a deep
+ * shade angled over the desk with a visible bulb inside.
+ *
+ * Only the base counts as the footprint (see Product.footprint); the shade
+ * reaches forward over the desk or past the front of a shelf, which is what
+ * the 40cm depth in the catalogue describes.
+ */
 function DeskLamp({ product, light, lightScale = 1 }: ModelProps) {
   const h = M(product.dims.h);
-  const reach = M(product.dims.d);
+  const d = M(product.dims.d);
+  const w = M(product.dims.w);
   const [body, accent] = product.palette;
-  const mat = (
-    <meshStandardMaterial color={body} roughness={0.32} metalness={0.55} />
-  );
+  const glow = product.emissive?.color ?? "#fff2d8";
+  const spot = React.useRef<ThreeSpotLight>(null);
+  const aim = React.useRef<Object3D>(null);
+
+  React.useLayoutEffect(() => {
+    if (spot.current && aim.current) spot.current.target = aim.current;
+  }, [light]);
+
+  const metal = <meshStandardMaterial color={body} roughness={0.35} metalness={0.6} />;
+  const steel = <meshStandardMaterial color="#9a9ca1" roughness={0.3} metalness={0.85} />;
+
+  // The base sits on the origin — it is the footprint placement uses — and
+  // the arm reaches forward over whatever the lamp stands on.
+  const baseR = Math.min(w * 0.5, d * 0.22);
+  const pivot: Vec3 = [0, 0.05, 0];
+  const elbow: Vec3 = [0, h * 0.82, -d * 0.08];
+  const head: Vec3 = [0, h * 0.86, d * 0.5];
+  const bar = 0.009;
+  const tilt = -0.5; // shade angled forward, over the desk
+
+  // Deep cone with a rolled neck, open at the mouth.
+  const shadeH = Math.min(0.13, h * 0.26);
+  const mouth = Math.min(w * 0.45, 0.075);
+  const shade = lathe([
+    [mouth, -shadeH],
+    [mouth * 0.92, -shadeH * 0.72],
+    [mouth * 0.62, -shadeH * 0.4],
+    [0.02, -shadeH * 0.12],
+    [0.016, 0],
+    [0.004, 0.01],
+  ]);
 
   return (
     <group>
-      <mesh position={[0, h * 0.012, 0]} castShadow receiveShadow>
-        <cylinderGeometry args={[M(product.dims.w) / 2, M(product.dims.w) / 2, h * 0.025, 28]} />
-        {mat}
+      {/* Weighted base */}
+      <mesh position={[0, 0.009, pivot[2]]} castShadow receiveShadow>
+        <cylinderGeometry args={[baseR, baseR * 1.04, 0.018, 32]} />
+        {metal}
       </mesh>
-      <mesh position={[0, h * 0.5, 0]} castShadow>
-        <cylinderGeometry args={[0.008, 0.009, h * 0.95, 14]} />
-        {mat}
+      <mesh position={[0, 0.03, pivot[2]]} castShadow>
+        <cylinderGeometry args={[0.016, 0.02, 0.026, 16]} />
+        {metal}
       </mesh>
-      {/* Horizontal arm reaching over the desk */}
-      <mesh position={[0, h * 0.97, reach * 0.3]} rotation={[Math.PI / 2, 0, 0]} castShadow>
-        <cylinderGeometry args={[0.008, 0.008, reach * 0.62, 14]} />
-        {mat}
-      </mesh>
-      <group position={[0, h * 0.955, reach * 0.6]}>
-        <mesh rotation={[Math.PI, 0, 0]} castShadow>
-          <coneGeometry args={[M(product.dims.w) * 0.42, h * 0.14, 24, 1, true]} />
-          <meshStandardMaterial
-            color={body}
-            roughness={0.3}
-            metalness={0.5}
-            side={DoubleSide}
-          />
+
+      {/* Twin-bar arms */}
+      {[-1, 1].map((s) => (
+        <React.Fragment key={s}>
+          <Rod from={[s * bar, pivot[1], pivot[2]]} to={[s * bar, elbow[1], elbow[2]]} radius={0.0045}>
+            {metal}
+          </Rod>
+          <Rod from={[s * bar, elbow[1], elbow[2]]} to={[s * bar, head[1], head[2]]} radius={0.0045}>
+            {metal}
+          </Rod>
+        </React.Fragment>
+      ))}
+
+      {/* Counterbalance springs — the detail that says "architect lamp" */}
+      <Rod
+        from={[bar * 2.6, pivot[1] + 0.04, pivot[2] + 0.01]}
+        to={[bar * 2.6, elbow[1] - 0.06, elbow[2] + 0.01]}
+        radius={0.004}
+      >
+        {steel}
+      </Rod>
+      <Rod
+        from={[bar * 2.6, elbow[1] + 0.005, elbow[2] + 0.03]}
+        to={[bar * 2.6, head[1] + 0.01, head[2] - 0.08]}
+        radius={0.0035}
+      >
+        {steel}
+      </Rod>
+
+      {/* Joints */}
+      {[pivot, elbow, head].map((p, i) => (
+        <mesh key={i} position={p} rotation={[0, 0, Math.PI / 2]} castShadow>
+          <cylinderGeometry args={[0.012, 0.012, bar * 2 + 0.012, 16]} />
+          {metal}
         </mesh>
-        <mesh position={[0, -h * 0.055, 0]} rotation={[Math.PI / 2, 0, 0]}>
-          <circleGeometry args={[M(product.dims.w) * 0.33, 24]} />
-          <meshStandardMaterial
-            color={accent ?? "#fff2d8"}
-            emissive={product.emissive?.color ?? "#fff2d8"}
-            emissiveIntensity={product.emissive?.intensity ?? 1.4}
-            toneMapped={false}
-          />
+      ))}
+
+      {/* Shade */}
+      <group position={head} rotation={[tilt, 0, 0]}>
+        <mesh castShadow>
+          <latheGeometry args={[shade, 32]} />
+          <meshStandardMaterial color={body} roughness={0.38} metalness={0.5} side={DoubleSide} />
         </mesh>
+        {/* Inner reflector: bright, so the opening reads as lit */}
+        <mesh scale={[0.95, 0.98, 0.95]}>
+          <latheGeometry args={[shade, 32]} />
+          <ShellMaterial colour={accent ?? "#f3efe6"} glow={glow} intensity={0.7} side={BackSide} />
+        </mesh>
+        <Bulb colour={glow} radius={mouth * 0.34} position={[0, -shadeH * 0.5, 0]} />
+
         {light && product.emissive ? (
-          <spotLight
-            position={[0, -0.02, 0]}
-            target-position={[0, -1, 0]}
-            angle={0.85}
-            penumbra={0.8}
-            color={product.emissive.color}
-            intensity={product.emissive.lightIntensity * lightScale}
-            distance={product.emissive.distance}
-            decay={2}
-            castShadow
-          />
+          <>
+            <spotLight
+              ref={spot}
+              position={[0, -shadeH * 0.55, 0]}
+              angle={0.75}
+              penumbra={0.75}
+              color={glow}
+              intensity={product.emissive.lightIntensity * lightScale}
+              distance={product.emissive.distance}
+              decay={2}
+              castShadow
+              shadow-mapSize-width={512}
+              shadow-mapSize-height={512}
+              shadow-bias={-0.002}
+            />
+            <object3D ref={aim} position={[0, -1, 0]} />
+          </>
         ) : null}
       </group>
     </group>
   );
 }
 
+/** 3D-printed moon: a cratered relief sphere resting in a wooden cradle. */
 function MoonLamp({ product, light, lightScale = 1 }: ModelProps) {
   const w = M(product.dims.w);
   const h = M(product.dims.h);
   const r = w / 2;
-  const standH = h - w;
+  const standH = Math.max(0.012, h - w);
+  const glow = product.emissive?.color ?? product.palette[0];
+  const wood = product.palette[1] ?? "#5a3d26";
+  const map = React.useMemo(() => moonTexture(), []);
 
   return (
     <group>
-      {standH > 0.004 && (
-        <mesh position={[0, standH / 2, 0]} castShadow receiveShadow>
-          <cylinderGeometry args={[r * 0.42, r * 0.55, standH, 20]} />
-          <meshStandardMaterial color={product.palette[1] ?? "#2a2620"} roughness={0.5} />
-        </mesh>
-      )}
-      <mesh position={[0, standH + r, 0]} castShadow>
-        <icosahedronGeometry args={[r, 3]} />
-        <Emissive product={product} />
+      <mesh position={[0, standH * 0.3, 0]} castShadow receiveShadow>
+        <cylinderGeometry args={[r * 0.62, r * 0.68, standH * 0.6, 28]} />
+        <meshStandardMaterial color={wood} roughness={0.7} />
       </mesh>
-      <ProductLight product={product} enabled={light} scale={lightScale} position={[0, standH + r, 0]} />
+      {/* Cradle ring the sphere sits in */}
+      <mesh position={[0, standH, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+        <torusGeometry args={[r * 0.5, Math.max(0.003, r * 0.06), 10, 32]} />
+        <meshStandardMaterial color={wood} roughness={0.7} />
+      </mesh>
+      <mesh position={[0, standH + r * 0.88, 0]} castShadow>
+        <sphereGeometry args={[r, 48, 32]} />
+        <meshStandardMaterial
+          color={product.palette[0]}
+          map={map}
+          bumpMap={map}
+          bumpScale={3}
+          emissive={glow}
+          emissiveMap={map}
+          emissiveIntensity={0.55}
+          roughness={0.92}
+        />
+      </mesh>
+      <ProductLight
+        product={product}
+        enabled={light}
+        scale={lightScale}
+        position={[0, standH + r * 0.88, 0]}
+      />
+    </group>
+  );
+}
+
+/**
+ * Lava lamp: metal cone base, tapered glass vessel, cap — and wax that
+ * actually drifts, because a frozen lava lamp is the one thing that reads as
+ * fake at a glance.
+ */
+function LavaLamp({ product, light, lightScale = 1 }: ModelProps) {
+  const w = M(product.dims.w);
+  const h = M(product.dims.h);
+  const r = w / 2;
+  const [wax, metal] = product.palette;
+  const glow = product.emissive?.color ?? wax;
+  const rnd = React.useMemo(() => seededRandom(product.id), [product.id]);
+  const blobs = React.useMemo(
+    () =>
+      Array.from({ length: 4 }).map((_, i) => ({
+        x: (rnd() - 0.5) * r * 0.24,
+        z: (rnd() - 0.5) * r * 0.24,
+        s: r * (0.18 + rnd() * 0.1),
+        speed: 0.18 + rnd() * 0.14,
+        phase: i * 1.7 + rnd(),
+      })),
+    [r, rnd],
+  );
+  const refs = React.useRef<(Object3D | null)[]>([]);
+
+  const glassBottom = h * 0.33;
+  const glassTop = h * 0.86;
+
+  useFrame(({ clock }) => {
+    const t = clock.elapsedTime;
+    blobs.forEach((b, i) => {
+      const m = refs.current[i];
+      if (!m) return;
+      const k = 0.5 - 0.5 * Math.cos(t * b.speed + b.phase);
+      m.position.y = glassBottom + b.s + k * (glassTop - glassBottom - b.s * 3.2);
+      // Narrower near the top of the vessel, so the wax narrows with it.
+      const squeeze = 1 - k * 0.35;
+      m.scale.set(squeeze, 1.35 + k * 0.25, squeeze);
+    });
+  });
+
+  const base = lathe([
+    [0, 0],
+    [r, 0],
+    [r * 0.98, h * 0.02],
+    [r * 0.52, glassBottom],
+    [0, glassBottom],
+  ]);
+  const glass = lathe([
+    [0, glassBottom],
+    [r * 0.5, glassBottom],
+    [r * 0.63, h * 0.47],
+    [r * 0.56, h * 0.63],
+    [r * 0.36, glassTop],
+    [0, glassTop],
+  ]);
+  const cap = lathe([
+    [0, glassTop],
+    [r * 0.38, glassTop],
+    [r * 0.22, h],
+    [0, h],
+  ]);
+
+  return (
+    <group>
+      <mesh castShadow receiveShadow>
+        <latheGeometry args={[base, 36]} />
+        <meshStandardMaterial color={metal ?? "#b8b8bc"} roughness={0.25} metalness={0.85} />
+      </mesh>
+      <mesh castShadow>
+        <latheGeometry args={[cap, 36]} />
+        <meshStandardMaterial color={metal ?? "#b8b8bc"} roughness={0.25} metalness={0.85} />
+      </mesh>
+
+      {/* Wax: a pool at the bottom and drifting blobs. Unlit on purpose — the
+          lamp's own light sits among them, and at a few centimetres any lit
+          material blows out to white. Wax glowing in liquid has no shading
+          worth keeping anyway; the glass around it provides the form. */}
+      <mesh position={[0, glassBottom + r * 0.06, 0]} scale={[1, 0.3, 1]}>
+        <sphereGeometry args={[r * 0.48, 20, 12]} />
+        <meshBasicMaterial color={wax} />
+      </mesh>
+      {blobs.map((b, i) => (
+        <mesh
+          key={i}
+          ref={(m) => {
+            refs.current[i] = m;
+          }}
+          position={[b.x, glassBottom + b.s, b.z]}
+        >
+          <sphereGeometry args={[b.s, 18, 12]} />
+          <meshBasicMaterial color={wax} />
+        </mesh>
+      ))}
+
+      {/* Liquid and glass, drawn after the wax so the wax shows through */}
+      <mesh renderOrder={1}>
+        <latheGeometry args={[glass, 36]} />
+        <meshStandardMaterial
+          color={product.palette[2] ?? "#ffd9a0"}
+          emissive={glow}
+          emissiveIntensity={0.22}
+          roughness={0.05}
+          metalness={0}
+          transparent
+          opacity={0.42}
+          depthWrite={false}
+        />
+      </mesh>
+
+      <Bulb colour={glow} radius={r * 0.16} position={[0, glassBottom + 0.004, 0]} />
+      <ProductLight product={product} enabled={light} scale={lightScale} position={[0, h * 0.5, 0]} />
+    </group>
+  );
+}
+
+/** Himalayan salt lamp: a faceted, uneven crystal on a wooden plinth. */
+function SaltLamp({ product, light, lightScale = 1 }: ModelProps) {
+  const w = M(product.dims.w);
+  const h = M(product.dims.h);
+  const r = w / 2;
+  const plinth = Math.min(0.03, h * 0.14);
+  const rockH = h - plinth;
+  const glow = product.emissive?.color ?? product.palette[0];
+
+  const rock = React.useMemo(() => {
+    const g = new IcosahedronGeometry(1, 1);
+    const pos = g.attributes.position;
+    const rnd = seededRandom(product.id);
+    // Shared corners must move together or the facets tear apart, so the
+    // offset is keyed on where the vertex is, not on its index.
+    const offsets = new Map<string, number>();
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i);
+      const y = pos.getY(i);
+      const z = pos.getZ(i);
+      const key = `${x.toFixed(3)},${y.toFixed(3)},${z.toFixed(3)}`;
+      if (!offsets.has(key)) offsets.set(key, 0.8 + rnd() * 0.32);
+      const k = offsets.get(key)!;
+      const taper = y > 0 ? 1 - y * 0.28 : 1;
+      pos.setXYZ(i, x * k * taper * r * 0.95, (y * k * 0.5 + 0.5) * rockH, z * k * taper * r * 0.95);
+    }
+    g.computeVertexNormals();
+    return g;
+  }, [product.id, r, rockH]);
+
+  return (
+    <group>
+      <mesh position={[0, plinth / 2, 0]} castShadow receiveShadow>
+        <cylinderGeometry args={[r * 0.78, r * 0.82, plinth, 24]} />
+        <meshStandardMaterial color={product.palette[1] ?? "#3a2418"} roughness={0.75} />
+      </mesh>
+      <Bulb colour={glow} radius={r * 0.22} position={[0, plinth + rockH * 0.4, 0]} />
+      <mesh geometry={rock} position={[0, plinth * 0.7, 0]} castShadow>
+        <ShellMaterial
+          colour={product.palette[0]}
+          glow={glow}
+          intensity={0.6}
+          opacity={0.92}
+          roughness={0.5}
+          flat
+        />
+      </mesh>
+      <ProductLight
+        product={product}
+        enabled={light}
+        scale={lightScale}
+        position={[0, plinth + rockH * 0.45, 0]}
+      />
+    </group>
+  );
+}
+
+/** Jelly lamp: a glossy, slightly wobbly translucent dome on a dark base. */
+function JellyLamp({ product, light, lightScale = 1 }: ModelProps) {
+  const w = M(product.dims.w);
+  const h = M(product.dims.h);
+  const r = w / 2;
+  const baseH = Math.min(0.018, h * 0.12);
+  const bodyH = h - baseH;
+  const glow = product.emissive?.color ?? product.palette[0];
+
+  const profile = React.useMemo(() => {
+    const pts: [number, number][] = [[0, 0]];
+    for (let i = 0; i <= 20; i++) {
+      const t = i / 20;
+      // Rounded jelly silhouette with soft ridges down its side.
+      const radius = r * Math.pow(1 - Math.pow(t, 2.4), 0.55) * (1 + 0.05 * Math.sin(t * Math.PI * 4));
+      pts.push([radius, t * bodyH]);
+    }
+    return lathe(pts);
+  }, [r, bodyH]);
+
+  return (
+    <group>
+      <mesh position={[0, baseH / 2, 0]} castShadow receiveShadow>
+        <cylinderGeometry args={[r * 0.92, r * 0.96, baseH, 32]} />
+        <meshStandardMaterial color={product.palette[1] ?? "#2a2438"} roughness={0.4} metalness={0.2} />
+      </mesh>
+      <Bulb colour={glow} radius={r * 0.24} position={[0, baseH + bodyH * 0.32, 0]} />
+      <mesh position={[0, baseH, 0]} castShadow>
+        <latheGeometry args={[profile, 40]} />
+        <ShellMaterial colour={product.palette[0]} glow={glow} intensity={0.5} opacity={0.78} roughness={0.12} />
+      </mesh>
+      <ProductLight
+        product={product}
+        enabled={light}
+        scale={lightScale}
+        position={[0, baseH + bodyH * 0.4, 0]}
+      />
     </group>
   );
 }
@@ -669,31 +1039,56 @@ function BarLamp({ product, light, lightScale = 1 }: ModelProps) {
   const d = M(product.dims.d);
   const tall = h > w;
   const [body] = product.palette;
+  const glow = product.emissive?.color ?? product.palette[1] ?? "#ffffff";
 
+  if (tall) {
+    // Light tower: weighted round base, slim aluminium column, and a frosted
+    // diffuser running up its face — lit partly, so the column keeps its form.
+    const baseR = Math.min(w, d) * 0.5;
+    const colW = Math.min(w, d) * (h > 1 ? 0.32 : 0.62);
+    const colH = h - 0.02;
+    return (
+      <group>
+        <mesh position={[0, 0.01, 0]} castShadow receiveShadow>
+          <cylinderGeometry args={[baseR * 0.96, baseR, 0.02, 32]} />
+          <meshStandardMaterial color={body} roughness={0.35} metalness={0.7} />
+        </mesh>
+        <Slab args={[colW, colH, colW]} position={[0, 0.02 + colH / 2, 0]} colour={body} finish="metal" radius={colW * 0.3} />
+        <mesh position={[0, 0.02 + colH / 2, colW / 2 + 0.0008]}>
+          <planeGeometry args={[colW * 0.55, colH * 0.92]} />
+          <ShellMaterial colour="#f4f4f6" glow={glow} intensity={1.4} />
+        </mesh>
+        <Bulb colour={glow} radius={colW * 0.12} position={[0, 0.02 + colH * 0.55, colW / 2 - colW * 0.15]} />
+        <ProductLight product={product} enabled={light} scale={lightScale} position={[0, h * 0.6, d]} />
+      </group>
+    );
+  }
+
+  // Monitor light bar: a round aluminium bar on a clamp that hooks over the
+  // back of the screen, light strip facing down and slightly forward.
+  const barR = Math.min(h * 0.18, 0.012);
   return (
     <group>
-      <mesh position={[0, h / 2, 0]} castShadow receiveShadow>
-        <boxGeometry args={[w, h, d]} />
-        <meshStandardMaterial color={body} roughness={0.38} metalness={0.4} />
-      </mesh>
-      {/* Emissive face: down-facing for a monitor bar, front-facing for a tower */}
-      {tall ? (
-        <mesh position={[0, h / 2, d / 2 + 0.001]}>
-          <planeGeometry args={[w * 0.6, h * 0.88]} />
-          <Emissive product={product} />
+      <group position={[0, h - barR, 0]}>
+        <mesh rotation={[0, 0, Math.PI / 2]} castShadow>
+          <cylinderGeometry args={[barR, barR, w, 24]} />
+          <meshStandardMaterial color={body} roughness={0.3} metalness={0.75} />
         </mesh>
-      ) : (
-        <mesh position={[0, 0.001, d * 0.1]} rotation={[Math.PI / 2, 0, 0]}>
-          <planeGeometry args={[w * 0.92, d * 0.5]} />
-          <Emissive product={product} />
+        {[-1, 1].map((s) => (
+          <mesh key={s} position={[(s * w) / 2, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
+            <cylinderGeometry args={[barR * 1.05, barR * 1.05, 0.004, 24]} />
+            <meshStandardMaterial color="#2a2a2e" roughness={0.5} />
+          </mesh>
+        ))}
+        <mesh position={[0, -barR * 0.98, barR * 0.25]} rotation={[Math.PI / 2 - 0.3, 0, 0]}>
+          <planeGeometry args={[w * 0.94, barR * 0.9]} />
+          <meshBasicMaterial color={glow} toneMapped={false} />
         </mesh>
-      )}
-      <ProductLight
-        product={product}
-        enabled={light}
-        scale={lightScale}
-        position={tall ? [0, h * 0.6, d] : [0, -0.01, d * 0.4]}
-      />
+      </group>
+      {/* Clamp: front lip, top saddle and a counterweight hanging behind */}
+      <Slab args={[0.05, 0.012, d * 0.9]} position={[0, h - barR * 2 - 0.006, -d * 0.05]} colour={body} finish="metal" radius={0.004} />
+      <Slab args={[0.04, h * 0.7, 0.014]} position={[0, h * 0.4, -d / 2 + 0.007]} colour={body} finish="metal" radius={0.005} />
+      <ProductLight product={product} enabled={light} scale={lightScale} position={[0, -0.01, d * 0.4]} />
     </group>
   );
 }
@@ -999,13 +1394,29 @@ function Plant({ product }: ModelProps) {
 
   return (
     <group>
-      <mesh position={[0, potH / 2, 0]} castShadow receiveShadow>
-        <cylinderGeometry args={[potR, potR * 0.78, potH, 26]} />
-        <meshStandardMaterial color={pot ?? "#2a2724"} roughness={0.78} />
+      {/* Turned pot with a rolled rim, so it reads as ceramic, not a cup */}
+      <mesh castShadow receiveShadow>
+        <latheGeometry
+          args={[
+            lathe([
+              [0, 0],
+              [potR * 0.74, 0],
+              [potR * 0.78, potH * 0.04],
+              [potR * 0.93, potH * 0.82],
+              [potR * 1.02, potH * 0.86],
+              [potR * 1.03, potH],
+              [potR * 0.9, potH],
+              [potR * 0.88, potH * 0.9],
+              [0, potH * 0.9],
+            ]),
+            36,
+          ]}
+        />
+        <meshStandardMaterial color={pot ?? "#2a2724"} roughness={0.55} />
       </mesh>
-      <mesh position={[0, potH - 0.004, 0]}>
-        <cylinderGeometry args={[potR * 0.94, potR * 0.94, 0.008, 22]} />
-        <meshStandardMaterial color="#221a14" roughness={1} />
+      <mesh position={[0, potH * 0.91, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[potR * 0.88, 28]} />
+        <meshStandardMaterial color="#2e2219" roughness={1} />
       </mesh>
       <group position={[0, potH, 0]}>
         <Leaves
@@ -1192,49 +1603,6 @@ function Figure({ product }: ModelProps) {
   );
 }
 
-function Funko({ product }: ModelProps) {
-  const w = M(product.dims.w);
-  const h = M(product.dims.h);
-  const [body, accent, skin] = product.palette;
-  const headR = h * 0.3;
-  const bodyH = h * 0.36;
-
-  return (
-    <group>
-      <mesh position={[0, h * 0.015, 0]} castShadow receiveShadow>
-        <cylinderGeometry args={[w * 0.42, w * 0.44, h * 0.03, 20]} />
-        <meshStandardMaterial color="#1a1a1c" roughness={0.5} />
-      </mesh>
-      {[-1, 1].map((s) => (
-        <mesh key={s} position={[s * w * 0.13, h * 0.09, 0]} castShadow>
-          <boxGeometry args={[w * 0.18, h * 0.12, w * 0.24]} />
-          <meshStandardMaterial color={accent ?? body} roughness={0.66} />
-        </mesh>
-      ))}
-      <mesh position={[0, h * 0.03 + bodyH / 2 + h * 0.1, 0]} castShadow>
-        <boxGeometry args={[w * 0.52, bodyH, w * 0.36]} />
-        <meshStandardMaterial color={body} roughness={0.66} />
-      </mesh>
-      {[-1, 1].map((s) => (
-        <mesh key={s} position={[s * w * 0.33, h * 0.3, 0]} castShadow>
-          <capsuleGeometry args={[w * 0.06, bodyH * 0.5, 3, 8]} />
-          <meshStandardMaterial color={skin ?? "#e8d8c4"} roughness={0.66} />
-        </mesh>
-      ))}
-      {/* Oversized head is the entire visual language of the format */}
-      <mesh position={[0, h - headR * 0.95, 0]} castShadow>
-        <boxGeometry args={[headR * 1.7, headR * 1.75, headR * 1.55]} />
-        <meshStandardMaterial color={skin ?? "#e8d8c4"} roughness={0.6} />
-      </mesh>
-      {[-1, 1].map((s) => (
-        <mesh key={s} position={[s * headR * 0.4, h - headR * 0.85, headR * 0.79]}>
-          <circleGeometry args={[headR * 0.17, 14]} />
-          <meshStandardMaterial color="#14141a" roughness={0.3} />
-        </mesh>
-      ))}
-    </group>
-  );
-}
 
 function Bust({ product, light, lightScale = 1 }: ModelProps) {
   const w = M(product.dims.w);
@@ -1332,6 +1700,31 @@ function Organizer({ product, light, lightScale = 1 }: ModelProps) {
   const round = product.tags.includes("pen") || product.tags.includes("concrete");
   const board = product.tags.includes("letter board") || product.tags.includes("memo");
 
+  if (product.tags.includes("keycaps")) {
+    // A tray of individual sculpted caps rather than a coloured brick.
+    const cols = 5;
+    const rows = 3;
+    const cw = (w * 0.9) / cols;
+    const cd = (d * 0.84) / rows;
+    return (
+      <group>
+        <Slab args={[w, h * 0.3, d]} position={[0, h * 0.15, 0]} colour="#1a1a1e" finish="plastic" radius={0.003} />
+        {Array.from({ length: rows }).map((_, r) =>
+          Array.from({ length: cols }).map((__, c) => (
+            <Slab
+              key={`${r}${c}`}
+              args={[cw * 0.82, h * 0.62, cd * 0.82]}
+              position={[-w * 0.45 + cw * (c + 0.5), h * 0.3 + h * 0.31, -d * 0.42 + cd * (r + 0.5)]}
+              colour={(r + c) % 3 === 0 ? accent ?? body : body}
+              finish="plastic"
+              radius={Math.min(cw, cd) * 0.18}
+            />
+          )),
+        )}
+      </group>
+    );
+  }
+
   if (round) {
     return (
       <group>
@@ -1413,103 +1806,7 @@ function Organizer({ product, light, lightScale = 1 }: ModelProps) {
   );
 }
 
-function Speaker({ product, light, lightScale = 1 }: ModelProps) {
-  const w = M(product.dims.w);
-  const h = M(product.dims.h);
-  const d = M(product.dims.d);
-  const [body, accent] = product.palette;
-  const arcade = product.tags.includes("arcade");
 
-  if (arcade) {
-    return (
-      <group>
-        <mesh position={[0, h / 2, 0]} castShadow receiveShadow>
-          <boxGeometry args={[w, h, d]} />
-          <meshStandardMaterial color={body} roughness={0.5} />
-        </mesh>
-        <mesh position={[0, h * 0.68, d / 2 + 0.001]} rotation={[-0.18, 0, 0]}>
-          <planeGeometry args={[w * 0.74, h * 0.34]} />
-          <Emissive product={product} />
-        </mesh>
-        <mesh position={[0, h * 0.33, d / 2 + 0.002]} rotation={[-0.9, 0, 0]}>
-          <planeGeometry args={[w * 0.82, h * 0.16]} />
-          <meshStandardMaterial color={accent ?? "#141416"} roughness={0.6} />
-        </mesh>
-        <ProductLight product={product} enabled={light} scale={lightScale} position={[0, h * 0.7, d]} />
-      </group>
-    );
-  }
-
-  return (
-    <group>
-      <mesh position={[0, h / 2, 0]} castShadow receiveShadow>
-        <cylinderGeometry args={[w / 2, w / 2, h * 0.94, 30]} />
-        <meshStandardMaterial color={body} roughness={0.92} />
-      </mesh>
-      <mesh position={[0, h * 0.97, 0]}>
-        <cylinderGeometry args={[w / 2 * 0.96, w / 2 * 0.96, h * 0.06, 30]} />
-        <meshStandardMaterial color={accent ?? "#8a8a92"} roughness={0.3} metalness={0.65} />
-      </mesh>
-      <mesh position={[0, h * 0.99, 0]}>
-        <torusGeometry args={[w * 0.26, w * 0.02, 8, 26]} />
-        <meshStandardMaterial color="#1a1a1e" roughness={0.5} />
-      </mesh>
-    </group>
-  );
-}
-
-function HeadphoneStand({ product }: ModelProps) {
-  const w = M(product.dims.w);
-  const h = M(product.dims.h);
-  const d = M(product.dims.d);
-  const [metal, dark] = product.palette;
-  const katana = product.tags.includes("katana");
-
-  if (katana) {
-    return (
-      <group>
-        <mesh position={[0, h * 0.12, 0]} castShadow receiveShadow>
-          <boxGeometry args={[w * 0.34, h * 0.24, d]} />
-          <meshStandardMaterial color={metal} roughness={0.62} />
-        </mesh>
-        {[-1, 1].map((s) => (
-          <mesh key={s} position={[s * w * 0.3, h * 0.55, 0]} castShadow>
-            <boxGeometry args={[w * 0.06, h * 0.62, d * 0.5]} />
-            <meshStandardMaterial color={metal} roughness={0.62} />
-          </mesh>
-        ))}
-        <group position={[0, h * 0.82, 0]} rotation={[0, 0, 0.04]}>
-          <mesh castShadow>
-            <cylinderGeometry args={[h * 0.035, h * 0.035, w * 0.94, 10]} />
-            <meshStandardMaterial color="#c8ccd2" roughness={0.16} metalness={0.95} />
-          </mesh>
-          <mesh position={[-w * 0.36, 0, 0]} castShadow>
-            <cylinderGeometry args={[h * 0.042, h * 0.042, w * 0.24, 10]} />
-            <meshStandardMaterial color={dark ?? "#141414"} roughness={0.8} />
-          </mesh>
-        </group>
-      </group>
-    );
-  }
-
-  return (
-    <group>
-      <mesh position={[0, h * 0.012, 0]} castShadow receiveShadow>
-        <cylinderGeometry args={[w / 2, w / 2, h * 0.025, 26]} />
-        <meshStandardMaterial color={metal} roughness={0.3} metalness={0.8} />
-      </mesh>
-      <mesh position={[0, h * 0.5, 0]} castShadow>
-        <cylinderGeometry args={[w * 0.07, w * 0.08, h * 0.95, 16]} />
-        <meshStandardMaterial color={metal} roughness={0.3} metalness={0.8} />
-      </mesh>
-      {/* Yoke that the headband actually rests in */}
-      <mesh position={[0, h * 0.96, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
-        <torusGeometry args={[w * 0.3, w * 0.05, 10, 24, Math.PI]} />
-        <meshStandardMaterial color={dark ?? metal} roughness={0.55} metalness={0.3} />
-      </mesh>
-    </group>
-  );
-}
 
 function Rug({ product }: ModelProps) {
   const w = M(product.dims.w);
@@ -1563,33 +1860,6 @@ function SideTable({ product }: ModelProps) {
   );
 }
 
-function BeanBag({ product }: ModelProps) {
-  const w = M(product.dims.w);
-  const h = M(product.dims.h);
-  const tex = React.useMemo(
-    () => weaveTexture(product.palette[0], product.palette[1] ?? product.palette[0], product.id),
-    [product],
-  );
-
-  return (
-    <group>
-      <mesh position={[0, h * 0.38, 0]} scale={[1, 0.76, 1]} castShadow receiveShadow>
-        <sphereGeometry args={[w / 2, 26, 20]} />
-        <meshStandardMaterial map={tex} roughness={0.95} />
-      </mesh>
-      {/* Slumped backrest — a plain squashed sphere reads as a ball, not a seat */}
-      <mesh
-        position={[0, h * 0.66, -w * 0.16]}
-        scale={[0.82, 0.62, 0.7]}
-        rotation={[-0.3, 0, 0]}
-        castShadow
-      >
-        <sphereGeometry args={[w / 2, 22, 16]} />
-        <meshStandardMaterial map={tex} roughness={0.95} />
-      </mesh>
-    </group>
-  );
-}
 
 
 /* ------------------------------------------------------------------ */
@@ -1665,22 +1935,22 @@ function MushroomLamp({ product, light, lightScale = 1 }: ModelProps) {
         <meshStandardMaterial color={base ?? shade} roughness={0.35} metalness={0.2} />
       </mesh>
 
-      {/* Dome: a hemisphere, lit from inside */}
+      {/* Dome: a hemisphere, lit from inside — partly, so it keeps its curve */}
       <mesh position={[0, h * 0.62, 0]} castShadow>
-        <sphereGeometry args={[r, 30, 18, 0, Math.PI * 2, 0, Math.PI / 2]} />
-        <meshStandardMaterial
-          color={shade}
-          emissive={colour}
-          emissiveIntensity={product.emissive?.intensity ?? 1.6}
-          roughness={0.42}
-          side={DoubleSide}
-          toneMapped={false}
-        />
+        <sphereGeometry args={[r, 36, 20, 0, Math.PI * 2, 0, Math.PI / 2]} />
+        <ShellMaterial colour={shade} glow={colour} intensity={0.55} roughness={0.42} side={DoubleSide} />
       </mesh>
+      {/* Rolled rim, so the dome has an edge rather than a paper-thin lip */}
+      <mesh position={[0, h * 0.62, 0]} rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[r * 0.985, Math.max(0.002, r * 0.04), 8, 40]} />
+        <ShellMaterial colour={shade} glow={colour} intensity={0.55} roughness={0.42} />
+      </mesh>
+      {/* The light spills out underneath, where a real mushroom lamp is brightest */}
       <mesh position={[0, h * 0.6, 0]} rotation={[Math.PI / 2, 0, 0]}>
         <circleGeometry args={[r * 0.94, 28]} />
-        <meshBasicMaterial color={colour} toneMapped={false} />
+        <meshStandardMaterial color={shade} emissive={colour} emissiveIntensity={1.2} side={DoubleSide} />
       </mesh>
+      <Bulb colour={colour} radius={r * 0.2} position={[0, h * 0.6 - r * 0.12, 0]} />
 
       {light && product.emissive ? (
         <pointLight
@@ -1810,6 +2080,632 @@ function CutoutPanel({ product, customTexture, light, lightScale = 1 }: ModelPro
   );
 }
 
+/* ================================================================== */
+/* Shelves                                                             */
+/* ================================================================== */
+
+/**
+ * Floating shelf: one board, softened edges, no visible bracket — the hidden
+ * bracket is the whole point of the product. Origin on the wall, board out
+ * along +z, top face at +h/2, which is what stackSurface() reports.
+ */
+function Shelf({ product }: ModelProps) {
+  const w = M(product.dims.w);
+  const h = M(product.dims.h);
+  const d = M(product.dims.d);
+  return (
+    <group>
+      <Slab args={[w, h, d]} position={[0, 0, d / 2]} colour={product.palette[0]} radius={Math.min(0.006, h * 0.3)} />
+    </group>
+  );
+}
+
+/** Three open hexagon frames in a honeycomb cluster, each with a back panel. */
+function HexShelf({ product }: ModelProps) {
+  const w = M(product.dims.w);
+  const h = M(product.dims.h);
+  const d = M(product.dims.d);
+  const [wood, back] = product.palette;
+  const R = Math.min(w / 3.5, h / (4 * 0.866));
+  const a = R * 0.866;
+  const t = Math.max(0.008, R * 0.12);
+  // Flat-topped hexagons; neighbours sit 1.5R across and one apothem up/down.
+  const cells: [number, number][] = [
+    [-0.75 * R, 0],
+    [0.75 * R, a],
+    [0.75 * R, -a],
+  ];
+
+  return (
+    <group>
+      {cells.map(([cx, cy], i) => (
+        <group key={i} position={[cx, cy, 0]}>
+          <mesh position={[0, 0, 0.003]} receiveShadow>
+            <circleGeometry args={[R - t * 0.5, 6]} />
+            <meshStandardMaterial color={back ?? wood} roughness={0.7} />
+          </mesh>
+          {Array.from({ length: 6 }).map((_, k) => {
+            const ang = (Math.PI / 3) * k + Math.PI / 6;
+            return (
+              <Slab
+                key={k}
+                args={[R + t * 0.55, t, d]}
+                position={[Math.cos(ang) * (a - t / 2), Math.sin(ang) * (a - t / 2), d / 2]}
+                rotation={[0, 0, ang + Math.PI / 2]}
+                colour={wood}
+                radius={0.002}
+              />
+            );
+          })}
+        </group>
+      ))}
+    </group>
+  );
+}
+
+/** Wall bracket with two padded arms, and a game controller resting in it. */
+function ControllerMount({ product }: ModelProps) {
+  const w = M(product.dims.w);
+  const h = M(product.dims.h);
+  const d = M(product.dims.d);
+  const [body, accent] = product.palette;
+
+  return (
+    <group>
+      <Slab args={[w * 0.42, h, 0.01]} position={[0, 0, 0.005]} colour={body} finish="plastic" radius={0.003} />
+      {[-1, 1].map((s) => (
+        <group key={s} position={[s * w * 0.24, -h * 0.25, 0]}>
+          <Slab args={[0.012, 0.012, d]} position={[0, 0, d / 2]} colour={body} finish="plastic" radius={0.004} />
+          <Slab args={[0.012, 0.028, 0.012]} position={[0, 0.01, d - 0.006]} colour={body} finish="plastic" radius={0.004} />
+        </group>
+      ))}
+
+      {/* The controller itself: body, two grips, sticks and face buttons */}
+      <group position={[0, -h * 0.25 + 0.022, d * 0.55]} rotation={[-0.35, 0, 0]}>
+        <Slab args={[w * 1.25, 0.03, 0.055]} colour="#1c1c20" finish="plastic" radius={0.012} />
+        {[-1, 1].map((s) => (
+          <mesh key={s} position={[s * w * 0.5, -0.006, 0.026]} rotation={[0.9, 0, s * 0.3]} castShadow>
+            <capsuleGeometry args={[0.014, 0.03, 4, 10]} />
+            <meshStandardMaterial color="#1c1c20" roughness={0.38} />
+          </mesh>
+        ))}
+        {[-1, 1].map((s) => (
+          <mesh key={`k${s}`} position={[s * w * 0.2, 0.019, s * 0.008]}>
+            <cylinderGeometry args={[0.007, 0.008, 0.01, 14]} />
+            <meshStandardMaterial color="#2c2c30" roughness={0.6} />
+          </mesh>
+        ))}
+        {[0, 1, 2, 3].map((i) => (
+          <mesh key={`b${i}`} position={[w * 0.38 + Math.cos(i * 1.57) * 0.008, 0.017, -0.008 + Math.sin(i * 1.57) * 0.008]}>
+            <sphereGeometry args={[0.003, 8, 6]} />
+            <meshStandardMaterial color={accent ?? "#7c4dff"} emissive={accent ?? "#7c4dff"} emissiveIntensity={0.3} />
+          </mesh>
+        ))}
+      </group>
+    </group>
+  );
+}
+
+/** Monitor riser: a deck on two side legs, with room under it for a keyboard. */
+function MonitorRiser({ product }: ModelProps) {
+  const w = M(product.dims.w);
+  const h = M(product.dims.h);
+  const d = M(product.dims.d);
+  const [top, legs] = product.palette;
+  const deck = Math.min(0.018, h * 0.2);
+
+  return (
+    <group>
+      <Slab args={[w, deck, d]} position={[0, h - deck / 2, 0]} colour={top} radius={0.005} />
+      {[-1, 1].map((s) => (
+        <Slab key={s} args={[0.022, h - deck, d * 0.92]} position={[s * (w / 2 - 0.03), (h - deck) / 2, 0]} colour={legs ?? top} radius={0.005} />
+      ))}
+      {/* Cable notch at the back */}
+      <Slab args={[w * 0.2, deck * 0.6, 0.02]} position={[0, h - deck / 2, -d / 2 + 0.006]} colour={legs ?? top} radius={0.003} />
+    </group>
+  );
+}
+
+/** Two-bay desktop bookshelf with a few books in it. */
+function MiniBookshelf({ product }: ModelProps) {
+  const w = M(product.dims.w);
+  const h = M(product.dims.h);
+  const d = M(product.dims.d);
+  const [body, back] = product.palette;
+  const t = 0.012;
+  const rnd = useSeeded(product.id);
+  const books = React.useMemo(() => {
+    const spines = ["#c9a227", "#e8e2d4", "#6b2b2b", "#2a3a5a", "#3f6b46"];
+    const out: { x: number; bw: number; bh: number; c: string }[] = [];
+    let x = 0;
+    while (x < w * 0.5) {
+      const bw = 0.014 + rnd() * 0.012;
+      out.push({ x: x + bw / 2, bw, bh: (h - t * 2) * (0.7 + rnd() * 0.25), c: spines[out.length % spines.length] });
+      x += bw + 0.002;
+    }
+    return out;
+  }, [w, h, rnd]);
+
+  return (
+    <group>
+      {[-1, 1].map((s) => (
+        <Slab key={s} args={[t, h, d]} position={[s * (w / 2 - t / 2), h / 2, 0]} colour={body} radius={0.003} />
+      ))}
+      <Slab args={[w, t, d]} position={[0, h - t / 2, 0]} colour={body} radius={0.003} />
+      <Slab args={[w - t * 2, t, d]} position={[0, t / 2, 0]} colour={body} radius={0.003} />
+      <Slab args={[t, h - t * 2, d - 0.004]} position={[w * 0.12, h / 2, 0]} colour={body} radius={0.002} />
+      <mesh position={[0, h / 2, -d / 2 + 0.002]}>
+        <planeGeometry args={[w - t * 2, h - t * 2]} />
+        <meshStandardMaterial color={back ?? body} roughness={0.7} />
+      </mesh>
+      <group position={[-w / 2 + t + 0.004, t, 0]}>
+        <MergedBoxes parts={books.map((b) => ({ size: [b.bw, b.bh, d * 0.8], position: [b.x, b.bh / 2, 0.004], colour: b.c }))}>
+          <meshStandardMaterial vertexColors roughness={0.8} />
+        </MergedBoxes>
+      </group>
+    </group>
+  );
+}
+
+/* ================================================================== */
+/* Vinyl figures                                                       */
+/* ================================================================== */
+
+/** One glossy vinyl figure: oversized rounded head, hair cap, tiny body. */
+function VinylFigure({
+  w,
+  h,
+  body,
+  hair,
+  skin,
+  round = false,
+}: {
+  w: number;
+  h: number;
+  body: string;
+  hair: string;
+  skin: string;
+  round?: boolean;
+}) {
+  const headH = h * 0.5;
+  const headW = Math.min(w * 0.95, headH * 1.05);
+  const bodyH = h * 0.3;
+  const legH = h * 0.12;
+  const headY = legH + bodyH + headH / 2 - h * 0.02;
+  const vinyl = (c: string) => <meshStandardMaterial color={c} roughness={0.32} metalness={0} />;
+
+  return (
+    <group>
+      <mesh position={[0, 0.003, 0]} receiveShadow>
+        <cylinderGeometry args={[w * 0.42, w * 0.44, 0.006, 24]} />
+        <meshStandardMaterial color="#141416" roughness={0.4} />
+      </mesh>
+      {[-1, 1].map((s) => (
+        <mesh key={s} position={[s * w * 0.11, legH / 2 + 0.004, 0]} castShadow>
+          <capsuleGeometry args={[w * 0.08, legH * 0.5, 4, 10]} />
+          {vinyl(body)}
+        </mesh>
+      ))}
+      <Slab args={[w * 0.46, bodyH, w * 0.34]} position={[0, legH + bodyH / 2, 0]} colour={body} finish="plastic" radius={w * 0.12} />
+      {[-1, 1].map((s) => (
+        <mesh key={`a${s}`} position={[s * w * 0.29, legH + bodyH * 0.55, 0]} rotation={[0, 0, s * 0.18]} castShadow>
+          <capsuleGeometry args={[w * 0.055, bodyH * 0.55, 4, 10]} />
+          {vinyl(skin)}
+        </mesh>
+      ))}
+
+      {/* The head is the entire visual language of the format */}
+      {round ? (
+        <mesh position={[0, headY, 0]} scale={[headW / 2, headH / 2, headW / 2.1]} castShadow>
+          <sphereGeometry args={[1, 28, 20]} />
+          {vinyl(skin)}
+        </mesh>
+      ) : (
+        <Slab args={[headW, headH, headW * 0.9]} position={[0, headY, 0]} colour={skin} finish="plastic" radius={headW * 0.28} />
+      )}
+      {/* Hair cap over the top and back of the head */}
+      <mesh
+        position={[0, headY + headH * 0.12, -headW * 0.04]}
+        scale={[headW * 0.56, headH * 0.48, headW * 0.52]}
+        castShadow
+      >
+        <sphereGeometry args={[1, 24, 14, 0, Math.PI * 2, 0, Math.PI * 0.55]} />
+        {vinyl(hair)}
+      </mesh>
+      {/* Eyes with a catch-light, which is what makes them read as eyes */}
+      {[-1, 1].map((s) => (
+        <group key={`e${s}`} position={[s * headW * 0.2, headY - headH * 0.05, headW * (round ? 0.47 : 0.452)]}>
+          <mesh>
+            <circleGeometry args={[headW * 0.085, 18]} />
+            <meshStandardMaterial color="#121216" roughness={0.15} />
+          </mesh>
+          <mesh position={[headW * 0.025, headW * 0.03, 0.0005]}>
+            <circleGeometry args={[headW * 0.022, 10]} />
+            <meshBasicMaterial color="#ffffff" />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  );
+}
+
+function Astronaut({ w, h, suit, visor }: { w: number; h: number; suit: string; visor: string }) {
+  const helmetR = Math.min(w * 0.42, h * 0.24);
+  const bodyH = h * 0.32;
+  const legH = h * 0.2;
+  return (
+    <group>
+      {[-1, 1].map((s) => (
+        <mesh key={s} position={[s * w * 0.13, legH / 2, 0]} castShadow>
+          <capsuleGeometry args={[w * 0.1, legH * 0.55, 4, 10]} />
+          <FinishMaterial colour={suit} finish="fabric" />
+        </mesh>
+      ))}
+      <Slab args={[w * 0.58, bodyH, w * 0.44]} position={[0, legH + bodyH / 2, 0]} colour={suit} finish="fabric" radius={w * 0.16} />
+      <Slab args={[w * 0.46, bodyH * 0.9, w * 0.22]} position={[0, legH + bodyH / 2, -w * 0.3]} colour="#cfd2d8" finish="plastic" radius={w * 0.06} />
+      {[-1, 1].map((s) => (
+        <mesh key={`a${s}`} position={[s * w * 0.36, legH + bodyH * 0.55, w * 0.03]} rotation={[0.3, 0, s * 0.35]} castShadow>
+          <capsuleGeometry args={[w * 0.085, bodyH * 0.6, 4, 10]} />
+          <FinishMaterial colour={suit} finish="fabric" />
+        </mesh>
+      ))}
+      <group position={[0, legH + bodyH + helmetR * 0.9, 0]}>
+        <mesh castShadow>
+          <sphereGeometry args={[helmetR, 32, 24]} />
+          <meshStandardMaterial color={suit} roughness={0.3} />
+        </mesh>
+        {/* Gold-tinted reflective visor */}
+        <mesh position={[0, -helmetR * 0.02, helmetR * 0.2]} scale={[0.84, 0.66, 0.9]}>
+          <sphereGeometry args={[helmetR, 28, 20, Math.PI * 0.05, Math.PI * 0.9, Math.PI * 0.25, Math.PI * 0.5]} />
+          <meshStandardMaterial color={visor} roughness={0.08} metalness={0.9} />
+        </mesh>
+      </group>
+    </group>
+  );
+}
+
+function Cat({ r, colour, accent }: { r: number; colour: string; accent: string }) {
+  const ceramic = <meshStandardMaterial color={colour} roughness={0.22} metalness={0} />;
+  return (
+    <group>
+      <mesh position={[0, r * 1.05, 0]} scale={[1, 1.15, 0.92]} castShadow>
+        <sphereGeometry args={[r, 24, 18]} />
+        {ceramic}
+      </mesh>
+      <mesh position={[0, r * 2.35, r * 0.08]} castShadow>
+        <sphereGeometry args={[r * 0.62, 22, 16]} />
+        {ceramic}
+      </mesh>
+      {[-1, 1].map((s) => (
+        <mesh key={s} position={[s * r * 0.36, r * 2.85, r * 0.06]} rotation={[0, 0, -s * 0.3]} castShadow>
+          <coneGeometry args={[r * 0.2, r * 0.38, 10]} />
+          {ceramic}
+        </mesh>
+      ))}
+      {[-1, 1].map((s) => (
+        <mesh key={`e${s}`} position={[s * r * 0.22, r * 2.42, r * 0.62]} scale={[1, 1.4, 1]}>
+          <sphereGeometry args={[r * 0.06, 8, 6]} />
+          <meshStandardMaterial color="#141416" roughness={0.2} />
+        </mesh>
+      ))}
+      <mesh position={[0, r * 2.28, r * 0.68]}>
+        <sphereGeometry args={[r * 0.05, 8, 6]} />
+        <meshStandardMaterial color={accent} roughness={0.3} />
+      </mesh>
+      {/* Tail curled round the base */}
+      <mesh position={[0, r * 0.18, 0]} rotation={[Math.PI / 2, 0, 0.6]} castShadow>
+        <torusGeometry args={[r * 0.95, r * 0.13, 10, 24, Math.PI * 0.9]} />
+        {ceramic}
+      </mesh>
+    </group>
+  );
+}
+
+function Funko({ product }: ModelProps) {
+  const w = M(product.dims.w);
+  const h = M(product.dims.h);
+  const d = M(product.dims.d);
+  const [a, b, c] = product.palette;
+  const tags = product.tags;
+
+  if (tags.includes("cat")) {
+    const cats = [
+      { x: -w * 0.3, r: Math.min(w, d) * 0.2, col: a },
+      { x: w * 0.02, r: Math.min(w, d) * 0.25, col: b ?? a },
+      { x: w * 0.33, r: Math.min(w, d) * 0.17, col: c ?? a },
+    ];
+    return (
+      <group>
+        {cats.map((cat, i) => (
+          <group key={i} position={[cat.x, 0, (i % 2) * d * 0.1]} rotation={[0, (i - 1) * 0.3, 0]}>
+            <Cat r={Math.min(cat.r, h / 3.2)} colour={cat.col} accent="#e88a9a" />
+          </group>
+        ))}
+      </group>
+    );
+  }
+
+  if (tags.includes("astronaut")) {
+    return <Astronaut w={w} h={h} suit={a} visor="#d9a441" />;
+  }
+
+  const chibi = tags.includes("chibi");
+  const skin = chibi ? c ?? "#f6e7c1" : "#f1dcc6";
+  if (tags.includes("set")) {
+    const colours = product.palette;
+    return (
+      <group>
+        {[-1, 0, 1].map((s, i) => (
+          <group key={s} position={[s * w * 0.36, 0, (i % 2) * d * 0.12]} scale={0.62}>
+            <VinylFigure w={w} h={h} body={colours[i % colours.length]} hair={colours[(i + 1) % colours.length]} skin={skin} round={chibi} />
+          </group>
+        ))}
+      </group>
+    );
+  }
+  return <VinylFigure w={w} h={h} body={a} hair={b ?? a} skin={c ?? skin} round={chibi} />;
+}
+
+/* ================================================================== */
+/* Audio, gaming, display                                              */
+/* ================================================================== */
+
+function Speaker({ product, light, lightScale = 1 }: ModelProps) {
+  const w = M(product.dims.w);
+  const h = M(product.dims.h);
+  const d = M(product.dims.d);
+  const [body, accent] = product.palette;
+
+  if (product.tags.includes("arcade")) {
+    const lowerH = h * 0.42;
+    const upperH = h * 0.46;
+    const side = accent ?? "#141416";
+    return (
+      <group>
+        {/* Cabinet: lower body, jutting control deck, recessed upper body */}
+        <Slab args={[w, lowerH, d * 0.82]} position={[0, lowerH / 2, -d * 0.09]} colour={body} finish="plastic" radius={0.004} />
+        <Slab args={[w, h * 0.05, d * 0.42]} position={[0, lowerH + h * 0.02, d * 0.22]} rotation={[0.25, 0, 0]} colour={side} finish="plastic" radius={0.003} />
+        <Slab args={[w, upperH, d * 0.62]} position={[0, lowerH + upperH / 2 + h * 0.04, -d * 0.19]} colour={body} finish="plastic" radius={0.004} />
+        {/* Marquee, lit */}
+        <mesh position={[0, h - h * 0.06, d * 0.12 + 0.001]}>
+          <planeGeometry args={[w * 0.86, h * 0.09]} />
+          <meshStandardMaterial color="#ffd36b" emissive="#ffb84d" emissiveIntensity={0.9} />
+        </mesh>
+        {/* Screen set into a dark bezel */}
+        <group position={[0, lowerH + upperH * 0.55, d * 0.12 + 0.001]} rotation={[-0.12, 0, 0]}>
+          <mesh>
+            <planeGeometry args={[w * 0.84, upperH * 0.62]} />
+            <meshStandardMaterial color="#0c0c10" roughness={0.3} />
+          </mesh>
+          <mesh position={[0, 0, 0.001]}>
+            <planeGeometry args={[w * 0.7, upperH * 0.5]} />
+            <Emissive product={product} intensityScale={0.6} />
+          </mesh>
+        </group>
+        {/* Joystick and buttons on the deck */}
+        <group position={[0, lowerH + h * 0.05, d * 0.25]} rotation={[0.25, 0, 0]}>
+          <mesh position={[-w * 0.2, h * 0.025, 0]}>
+            <cylinderGeometry args={[0.0018, 0.0018, h * 0.05, 8]} />
+            <meshStandardMaterial color="#1a1a1c" />
+          </mesh>
+          <mesh position={[-w * 0.2, h * 0.055, 0]}>
+            <sphereGeometry args={[w * 0.05, 12, 10]} />
+            <meshStandardMaterial color="#e33" roughness={0.3} />
+          </mesh>
+          {[0, 1, 2].map((i) => (
+            <mesh key={i} position={[w * (0.05 + i * 0.12), h * 0.008, 0]}>
+              <cylinderGeometry args={[w * 0.035, w * 0.035, h * 0.012, 12]} />
+              <meshStandardMaterial color={["#f2c14e", "#3fa9f5", "#7cd36b"][i]} roughness={0.3} />
+            </mesh>
+          ))}
+        </group>
+        {/* Side art stripe */}
+        {[-1, 1].map((s) => (
+          <mesh key={s} position={[s * (w / 2 + 0.0006), h * 0.55, -d * 0.1]} rotation={[0, s * Math.PI / 2, 0]}>
+            <planeGeometry args={[d * 0.5, h * 0.06]} />
+            <meshStandardMaterial color="#f2c14e" roughness={0.5} />
+          </mesh>
+        ))}
+        <ProductLight product={product} enabled={light} scale={lightScale} position={[0, h * 0.7, d]} />
+      </group>
+    );
+  }
+
+  const r = Math.min(w, d) / 2;
+  return (
+    <group>
+      {/* Rubber foot */}
+      <mesh position={[0, h * 0.02, 0]} receiveShadow>
+        <cylinderGeometry args={[r * 0.92, r * 0.88, h * 0.04, 30]} />
+        <meshStandardMaterial color="#141416" roughness={0.8} />
+      </mesh>
+      {/* Fabric-wrapped body */}
+      <mesh position={[0, h * 0.48, 0]} castShadow receiveShadow>
+        <cylinderGeometry args={[r, r, h * 0.88, 36]} />
+        <FinishMaterial colour={body} finish="fabric" />
+      </mesh>
+      {/* Rubberised top cap with controls */}
+      <mesh position={[0, h * 0.94, 0]} castShadow>
+        <cylinderGeometry args={[r * 0.97, r, h * 0.05, 36]} />
+        <meshStandardMaterial color={accent ?? "#3a3a40"} roughness={0.55} />
+      </mesh>
+      {[-1, 0, 1].map((s) => (
+        <mesh key={s} position={[s * r * 0.4, h * 0.97, 0]}>
+          <cylinderGeometry args={[r * 0.12, r * 0.12, h * 0.012, 14]} />
+          <meshStandardMaterial color="#202024" roughness={0.4} />
+        </mesh>
+      ))}
+      {/* Carry strap loop */}
+      <mesh position={[0, h * 0.99, -r * 0.6]} rotation={[0, Math.PI / 2, 0]} castShadow>
+        <torusGeometry args={[r * 0.28, r * 0.05, 8, 20, Math.PI]} />
+        <meshStandardMaterial color="#1a1a1e" roughness={0.7} />
+      </mesh>
+      {/* Status light */}
+      <mesh position={[0, h * 0.08, r + 0.0005]}>
+        <circleGeometry args={[r * 0.05, 10]} />
+        <meshBasicMaterial color="#4dd2ff" toneMapped={false} />
+      </mesh>
+    </group>
+  );
+}
+
+/** A katana in its scabbard: lacquered saya, guard, wrapped hilt. */
+function Katana({ length, colour, wrap }: { length: number; colour: string; wrap: string }) {
+  const curve = React.useMemo(
+    () =>
+      new CatmullRomCurve3([
+        new Vector3(-length * 0.22, 0, 0),
+        new Vector3(length * 0.15, length * 0.012, 0),
+        new Vector3(length * 0.5, length * 0.035, 0),
+      ]),
+    [length],
+  );
+  const r = length * 0.016;
+  return (
+    <group>
+      <mesh castShadow>
+        <tubeGeometry args={[curve, 24, r, 10, false]} />
+        <meshStandardMaterial color={colour} roughness={0.18} metalness={0.2} />
+      </mesh>
+      <mesh position={[length * 0.5, length * 0.035, 0]} castShadow>
+        <sphereGeometry args={[r, 10, 8]} />
+        <meshStandardMaterial color={colour} roughness={0.18} />
+      </mesh>
+      {/* Tsuba (guard) */}
+      <mesh position={[-length * 0.23, 0, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
+        <cylinderGeometry args={[r * 2.4, r * 2.4, r * 0.7, 18]} />
+        <meshStandardMaterial color="#b08d3c" roughness={0.3} metalness={0.85} />
+      </mesh>
+      {/* Tsuka (hilt) with its diamond wrap suggested by banding */}
+      <mesh position={[-length * 0.37, 0, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
+        <cylinderGeometry args={[r * 1.05, r * 1.05, length * 0.27, 12]} />
+        <meshStandardMaterial color={wrap} roughness={0.85} />
+      </mesh>
+      {Array.from({ length: 6 }).map((_, i) => (
+        <mesh key={i} position={[-length * (0.26 + i * 0.044), 0, 0]} rotation={[0, 0, Math.PI / 2]}>
+          <torusGeometry args={[r * 1.07, r * 0.18, 6, 14]} />
+          <meshStandardMaterial color="#e8e2d4" roughness={0.8} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+function HeadphoneStand({ product }: ModelProps) {
+  const w = M(product.dims.w);
+  const h = M(product.dims.h);
+  const d = M(product.dims.d);
+  const [metal, dark] = product.palette;
+
+  if (product.tags.includes("katana")) {
+    const baseH = h * 0.09;
+    return (
+      <group>
+        <Slab args={[w * 0.9, baseH, d]} position={[0, baseH / 2, 0]} colour="#2a1d14" finish="wood" radius={0.006} />
+        {[-1, 1].map((s) => (
+          <group key={s} position={[s * w * 0.3, 0, 0]}>
+            {/* Curved upright with two cradles */}
+            <Slab args={[w * 0.05, h * 0.86, d * 0.55]} position={[0, baseH + h * 0.43, 0]} colour={metal} finish="plastic" radius={0.008} />
+            {[0.5, 0.82].map((f) => (
+              <Slab key={f} args={[w * 0.06, h * 0.04, d * 0.75]} position={[0, h * f, d * 0.08]} colour={metal} finish="plastic" radius={0.008} />
+            ))}
+          </group>
+        ))}
+        <group position={[0, h * 0.53 + 0.01, d * 0.1]}>
+          <Katana length={w} colour={metal} wrap={dark ?? "#c9302c"} />
+        </group>
+        <group position={[0, h * 0.85 + 0.01, d * 0.1]}>
+          <Katana length={w * 0.78} colour={metal} wrap={dark ?? "#c9302c"} />
+        </group>
+      </group>
+    );
+  }
+
+  return (
+    <group>
+      <mesh position={[0, h * 0.012, 0]} castShadow receiveShadow>
+        <cylinderGeometry args={[w / 2, w / 2, h * 0.025, 26]} />
+        <meshStandardMaterial color={metal} roughness={0.3} metalness={0.8} />
+      </mesh>
+      <mesh position={[0, h * 0.5, 0]} castShadow>
+        <cylinderGeometry args={[w * 0.07, w * 0.08, h * 0.95, 16]} />
+        <meshStandardMaterial color={metal} roughness={0.3} metalness={0.8} />
+      </mesh>
+      {/* Yoke that the headband actually rests in */}
+      <mesh position={[0, h * 0.96, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+        <torusGeometry args={[w * 0.3, w * 0.05, 10, 24, Math.PI]} />
+        <meshStandardMaterial color={dark ?? metal} roughness={0.55} metalness={0.3} />
+      </mesh>
+    </group>
+  );
+}
+
+/* ================================================================== */
+/* Soft seating                                                        */
+/* ================================================================== */
+
+function BeanBag({ product }: ModelProps) {
+  const w = M(product.dims.w);
+  const h = M(product.dims.h);
+  const d = M(product.dims.d);
+  const [main, accent] = product.palette;
+
+  // A slumped teardrop, not two balls: a sphere with its base flattened onto
+  // the floor, the back pushed up and the seat pressed in where someone sat.
+  const geometry = React.useMemo(() => {
+    const g = new SphereGeometry(1, 48, 36);
+    const p = g.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i);
+      let y = p.getY(i);
+      const z = p.getZ(i);
+      if (y < 0) y *= 0.42;
+      if (z < 0 && y > 0) y += -z * y * 0.55;
+      if (z > -0.1 && y > 0.1) y -= y * Math.max(0, z + 0.1) * 0.45 * (1 - Math.abs(x) * 0.6);
+      p.setY(i, (y + 0.42) / 1.6);
+    }
+    g.computeVertexNormals();
+    return g;
+  }, []);
+
+  if (product.tags.includes("inflatable")) {
+    const tube = Math.min(w, d) * 0.14;
+    const ringR = Math.min(w, d) * 0.33;
+    const vinyl = (
+      <meshPhysicalMaterial color={main} roughness={0.06} transparent opacity={0.6} clearcoat={1} depthWrite={false} />
+    );
+    return (
+      <group>
+        <mesh position={[0, tube, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+          <torusGeometry args={[ringR, tube, 16, 40]} />
+          {vinyl}
+        </mesh>
+        <mesh position={[0, tube * 2.6, 0]} rotation={[Math.PI / 2, 0, 0]}>
+          <torusGeometry args={[ringR * 0.9, tube * 0.85, 16, 40]} />
+          {vinyl}
+        </mesh>
+        <mesh position={[0, h * 0.62, -d * 0.24]} rotation={[0.35, 0, 0]}>
+          <torusGeometry args={[ringR * 0.85, tube * 0.8, 16, 40]} />
+          <meshPhysicalMaterial color={accent ?? main} roughness={0.06} transparent opacity={0.6} clearcoat={1} depthWrite={false} />
+        </mesh>
+      </group>
+    );
+  }
+
+  return (
+    <group>
+      <mesh geometry={geometry} scale={[w / 2, h, d / 2]} castShadow receiveShadow>
+        <FinishMaterial colour={main} finish="fabric" />
+      </mesh>
+      {/* Carry handle on the back */}
+      <mesh position={[0, h * 0.75, -d * 0.43]} rotation={[0.4, 0, 0]}>
+        <torusGeometry args={[w * 0.06, w * 0.012, 6, 14, Math.PI]} />
+        <FinishMaterial colour={accent ?? main} finish="fabric" />
+      </mesh>
+    </group>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /* Dispatch                                                            */
 /* ------------------------------------------------------------------ */
@@ -1825,8 +2721,15 @@ const REGISTRY: Record<string, React.ComponentType<ModelProps>> = {
   wallClock: WallClock,
   mirror: Mirror,
   shelf: Shelf,
+  hexShelf: HexShelf,
+  controllerMount: ControllerMount,
+  monitorRiser: MonitorRiser,
+  miniBookshelf: MiniBookshelf,
   deskLamp: DeskLamp,
   moonLamp: MoonLamp,
+  lavaLamp: LavaLamp,
+  saltLamp: SaltLamp,
+  jellyLamp: JellyLamp,
   sunsetLamp: SunsetLamp,
   barLamp: BarLamp,
   discoBall: DiscoBall,

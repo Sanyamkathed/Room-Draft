@@ -48,8 +48,15 @@ export type ModelKind =
   | "wallClock"
   | "mirror"
   | "shelf"
+  | "hexShelf"
+  | "controllerMount"
+  | "monitorRiser"
+  | "miniBookshelf"
   | "deskLamp"
   | "moonLamp"
+  | "lavaLamp"
+  | "saltLamp"
+  | "jellyLamp"
   | "sunsetLamp"
   | "barLamp"
   | "discoBall"
@@ -121,6 +128,13 @@ export interface Product {
   tags: string[];
   rating: number;
   reviews: number;
+  /**
+   * The part that actually rests on a surface, in cm, when it is smaller than
+   * the overall size. An architect lamp is 40cm deep because its arm reaches
+   * over the desk, but only its 16cm base has to fit on the shelf. Placement
+   * and collision use this; the model is still drawn at full size.
+   */
+  footprint?: { w: number; d: number };
   /** Can other objects be stacked on top of this one? */
   stackable?: boolean;
   /** Search query used to build the marketplace link. */

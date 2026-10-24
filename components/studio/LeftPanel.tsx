@@ -7,6 +7,8 @@ import { PRODUCTS, PRODUCT_COUNT } from "@/lib/catalog/seed";
 import { formatDims, formatINR } from "@/lib/catalog/source";
 import { AESTHETICS, CATEGORIES, type CategoryId, type Product } from "@/lib/catalog/types";
 import { planPlacements, recommend } from "@/lib/assistant/engine";
+import { placeOnSurface } from "@/lib/placement/resolve";
+import { productById } from "@/lib/catalog/source";
 import { useStudio } from "@/lib/store/studio";
 import { Chip, IconButton } from "@/components/ui/primitives";
 import { cn } from "@/lib/utils/cn";
@@ -29,6 +31,16 @@ export function LeftPanel({ onTrace }: { onTrace?: () => void }) {
   const items = useStudio((s) => s.items);
   const addItemAt = useStudio((s) => s.addItemAt);
   const project = useStudio((s) => s.project);
+  const selectedId = useStudio((s) => s.selectedId);
+  const gridSnap = useStudio((s) => s.gridSnap);
+
+  // When a shelf, desk or table is selected, "+" puts things ON it — the
+  // fastest way there is to not have to aim at all, on a phone especially.
+  const target = React.useMemo(() => {
+    const it = selectedId ? items.find((i) => i.id === selectedId) : undefined;
+    const p = it ? productById(it.productId) : undefined;
+    return it && p?.stackable && p.model !== "rug" && p.model !== "checkerRug" ? { item: it, product: p } : null;
+  }, [selectedId, items]);
 
   const [category, setCategory] = React.useState<CategoryId | "all" | "for-you">("all");
   const [query, setQuery] = React.useState("");
@@ -63,10 +75,17 @@ export function LeftPanel({ onTrace }: { onTrace?: () => void }) {
   const quickAdd = React.useCallback(
     (product: Product) => {
       if (!room) return;
+      if (target && product.mount === "tabletop") {
+        const onIt = placeOnSurface(product, target.item.id, { room, items, gridSnap });
+        if (onIt) {
+          addItemAt(product.id, onIt.item);
+          return;
+        }
+      }
       const [placement] = planPlacements([product], room, items);
       if (placement) addItemAt(product.id, placement.item);
     },
-    [room, items, addItemAt],
+    [room, items, addItemAt, target, gridSnap],
   );
 
   return (
@@ -223,13 +242,20 @@ export function LeftPanel({ onTrace }: { onTrace?: () => void }) {
       </div>
 
       <footer className="border-t border-white/7 px-4 py-2.5">
-        <p className="text-[11px] text-chalk-4">
-          Drag onto your room, or press{" "}
-          <span className="inline-grid size-4 place-items-center rounded bg-white/10 text-[9px] font-bold text-chalk-2">
-            +
-          </span>{" "}
-          to place it for you
-        </p>
+        {target ? (
+          <p className="text-[11px] text-chalk-3">
+            <span className="font-semibold text-accent">+</span> adds onto{" "}
+            <span className="font-medium text-chalk">{target.product.name}</span>
+          </p>
+        ) : (
+          <p className="text-[11px] text-chalk-4">
+            Drag onto your room, or press{" "}
+            <span className="inline-grid size-4 place-items-center rounded bg-white/10 text-[9px] font-bold text-chalk-2">
+              +
+            </span>{" "}
+            to place it for you
+          </p>
+        )}
       </footer>
     </aside>
   );
