@@ -4,6 +4,7 @@ import * as React from "react";
 import { useThree } from "@react-three/fiber";
 import { Matrix3, Vector2, Vector3, type Intersection, type Object3D } from "three";
 import { productById } from "@/lib/catalog/source";
+import { dependentsOf } from "@/lib/placement/carry";
 import { resolvePlacement } from "@/lib/placement/resolve";
 import type { Ray, RayHit } from "@/lib/placement/types";
 import type { SurfaceId, Vec3 } from "@/lib/room/types";
@@ -115,7 +116,9 @@ export function DragController() {
       };
 
       // When moving an existing item, it must not collide with itself.
-      const others = d.itemId ? all.filter((i) => i.id !== d.itemId) : all;
+      // Nor with anything riding on it: those travel with it (see carry.ts).
+      const riders = d.itemId ? dependentsOf(all, d.itemId) : null;
+      const others = d.itemId ? all.filter((i) => i.id !== d.itemId && !riders!.has(i.id)) : all;
       const existing = d.itemId ? all.find((i) => i.id === d.itemId) : undefined;
 
       const result = resolvePlacement(product, {

@@ -4,6 +4,7 @@ import { create } from "zustand";
 import { productById } from "@/lib/catalog/source";
 import type { AestheticId } from "@/lib/catalog/types";
 import { resolvePlacement, settleItems } from "@/lib/placement/resolve";
+import { carryDependents, dependentsOf } from "@/lib/placement/carry";
 import { stackSurface } from "@/lib/placement/transform";
 import type { PlacedItem, PlacementResult } from "@/lib/placement/types";
 import { buildRoomFromPlan } from "@/lib/room/plan";
@@ -287,8 +288,11 @@ export const useStudio = create<StudioState>((set, get) => {
 
       // A move replaces the item in place; a fresh drop appends. Either way the
       // whole set is re-settled so anything resting on the moved object follows.
-      const next = draft.itemId
-        ? items.map((i) => (i.id === draft.itemId ? { ...item, id: draft.itemId! } : i))
+      // Whatever was resting on a moved item comes with it.
+      const before = draft.itemId ? items.find((i) => i.id === draft.itemId) : undefined;
+      const moved = before ? { ...item, id: before.id } : item;
+      const next = before
+        ? carryDependents(items, before, moved).map((i) => (i.id === before.id ? moved : i))
         : [...items, item];
 
       set({
@@ -313,9 +317,13 @@ export const useStudio = create<StudioState>((set, get) => {
 
     updateItem: (id, patch, shouldRecord = true) => {
       if (shouldRecord) record();
-      set((s) => ({
-        items: settleItems(s.items.map((i) => (i.id === id ? { ...i, ...patch } : i))),
-      }));
+      set((s) => {
+        const before = s.items.find((i) => i.id === id);
+        if (!before) return {};
+        const after = { ...before, ...patch };
+        const carried = carryDependents(s.items, before, after);
+        return { items: settleItems(carried.map((i) => (i.id === id ? after : i))) };
+      });
     },
 
     // Manual transform edits stay perfectly responsive while a slider is being
@@ -366,9 +374,10 @@ export const useStudio = create<StudioState>((set, get) => {
         }
       }
 
+      const riders = dependentsOf(items, id);
       const resolved = resolvePlacement(product, {
         room,
-        items: items.filter((i) => i.id !== id),
+        items: items.filter((i) => i.id !== id && !riders.has(i.id)),
         hit: {
           point: item.position,
           normal: item.surface
@@ -390,18 +399,21 @@ export const useStudio = create<StudioState>((set, get) => {
       });
 
       if (!resolved?.valid) return;
+      const after = { ...resolved.item, id };
       set({
         items: settleItems(
-          items.map((i) => (i.id === id ? { ...resolved.item, id } : i)),
+          carryDependents(items, item, after).map((i) => (i.id === id ? after : i)),
         ),
       });
     },
 
     moveItem: (id, result) => {
       record();
-      set((s) => ({
-        items: settleItems(s.items.map((i) => (i.id === id ? result.item : i))),
-      }));
+      set((s) => {
+        const before = s.items.find((i) => i.id === id);
+        const carried = before ? carryDependents(s.items, before, result.item) : s.items;
+        return { items: settleItems(carried.map((i) => (i.id === id ? result.item : i))) };
+      });
     },
 
     removeItem: (id) => {

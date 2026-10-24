@@ -12,6 +12,7 @@ import { productById } from "@/lib/catalog/source";
 import { useStudio } from "@/lib/store/studio";
 import { Chip, IconButton } from "@/components/ui/primitives";
 import { cn } from "@/lib/utils/cn";
+import { HoverPreview } from "./HoverPreview";
 import { ProductThumb } from "./ProductThumb";
 
 /**
@@ -41,6 +42,26 @@ export function LeftPanel({ onTrace }: { onTrace?: () => void }) {
     const p = it ? productById(it.productId) : undefined;
     return it && p?.stackable && p.model !== "rug" && p.model !== "checkerRug" ? { item: it, product: p } : null;
   }, [selectedId, items]);
+
+  const draft = useStudio((s) => s.draft);
+  const [hover, setHover] = React.useState<{ product: Product; y: number; x: number } | null>(null);
+  const hoverTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearHover = React.useCallback(() => {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+    setHover(null);
+  }, []);
+  // A short delay, so sweeping the mouse down the list doesn't flash a
+  // preview for every card it passes over.
+  const startHover = React.useCallback((product: Product, el: HTMLElement, pointerType: string) => {
+    if (pointerType !== "mouse") return;
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+    hoverTimer.current = setTimeout(() => {
+      const card = el.getBoundingClientRect();
+      const panel = el.closest("aside")?.getBoundingClientRect();
+      setHover({ product, y: card.top + card.height / 2, x: panel?.right ?? card.right });
+    }, 140);
+  }, []);
+  React.useEffect(() => () => clearHover(), [clearHover]);
 
   const [category, setCategory] = React.useState<CategoryId | "all" | "for-you">("all");
   const [query, setQuery] = React.useState("");
@@ -166,7 +187,7 @@ export function LeftPanel({ onTrace }: { onTrace?: () => void }) {
         </p>
       )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4" onScroll={clearHover}>
         {list.length === 0 ? (
           <p className="px-2 py-10 text-center text-[13px] text-chalk-4">
             Nothing matches “{query}”.
@@ -178,11 +199,14 @@ export function LeftPanel({ onTrace }: { onTrace?: () => void }) {
                 <div
                   role="button"
                   tabIndex={0}
+                  onPointerEnter={(e) => startHover(p, e.currentTarget, e.pointerType)}
+                  onPointerLeave={clearHover}
                   onPointerDown={(e) => {
                     // Left button / touch only, and don't steal text selection
                     // from the search field.
                     if (e.button !== 0) return;
                     e.preventDefault();
+                    clearHover();
                     beginDraft(p.id);
                   }}
                   onKeyDown={(e) => {
@@ -197,7 +221,10 @@ export function LeftPanel({ onTrace }: { onTrace?: () => void }) {
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
                   )}
                 >
-                  <ProductThumb product={p} className="size-14 shrink-0" />
+                  <ProductThumb
+                    product={p}
+                    className="size-14 shrink-0 transition-transform duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-110"
+                  />
 
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[12.5px] font-medium leading-tight text-chalk">
@@ -257,6 +284,11 @@ export function LeftPanel({ onTrace }: { onTrace?: () => void }) {
           </p>
         )}
       </footer>
+
+      <HoverPreview
+        product={hover && !draft ? hover.product : null}
+        anchor={hover && !draft ? { y: hover.y, x: hover.x } : null}
+      />
     </aside>
   );
 }
