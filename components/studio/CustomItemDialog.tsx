@@ -197,7 +197,14 @@ export function CustomItemDialog({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ url }),
       });
-      const data = (await res.json()) as {
+      // A platform error (payload too large, function timeout) arrives as
+      // plain text, not our JSON, so don't let parsing it be the failure.
+      const data = (await res.json().catch(() => ({
+        error:
+          res.status === 413
+            ? "That image is too large to import. Save it and upload it instead."
+            : "Couldn't import that link.",
+      }))) as {
         error?: string;
         title?: string;
         image?: string;

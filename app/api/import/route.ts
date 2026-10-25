@@ -21,7 +21,10 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const MAX_PAGE = 2_500_000;
-const MAX_IMAGE = 8_000_000;
+// The image goes back base64-encoded (4/3 the size) and Vercel refuses any
+// function response over 4.5 MB, so 3 MB is the most that fits. Bigger photos
+// can still be saved and uploaded: uploads never touch the server.
+const MAX_IMAGE = 3_000_000;
 
 /* ---------------- tiny per-client rate limit ---------------- */
 

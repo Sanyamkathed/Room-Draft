@@ -24,6 +24,7 @@ import net from "node:net";
 export class FetchRefused extends Error {}
 
 const MAX_REDIRECTS = 4;
+const TOO_LARGE = "That file is too large to import. Save the image and upload it instead.";
 
 function v4ToInt(ip: string): number {
   return ip.split(".").reduce((n, part) => (n << 8) + Number(part), 0) >>> 0;
@@ -51,20 +52,44 @@ const BLOCKED_V4: [string, number][] = [
   ["240.0.0.0", 4],
 ];
 
+/** An IPv6 address as eight 16-bit groups, with any dotted IPv4 tail folded in. */
+function v6Groups(ip: string): number[] {
+  let s = ip.toLowerCase().replace(/%.*$/, "");
+  const tail = s.match(/(\d+\.\d+\.\d+\.\d+)$/);
+  if (tail) {
+    const n = v4ToInt(tail[1]);
+    s = s.slice(0, -tail[1].length) + `${(n >>> 16).toString(16)}:${(n & 0xffff).toString(16)}`;
+  }
+  const [head, rest] = s.split("::");
+  const left = head ? head.split(":") : [];
+  const right = rest ? rest.split(":") : [];
+  const fill = rest === undefined ? [] : Array(8 - left.length - right.length).fill("0");
+  return [...left, ...fill, ...right].map((g) => parseInt(g, 16));
+}
+
+function groupsToV4(hi: number, lo: number): string {
+  return [hi >> 8, hi & 0xff, lo >> 8, lo & 0xff].join(".");
+}
+
 export function isPublicAddress(ip: string): boolean {
   if (net.isIPv4(ip)) return !BLOCKED_V4.some(([b, n]) => inV4(ip, b, n));
-  if (net.isIPv6(ip)) {
-    const lower = ip.toLowerCase();
-    const mapped = lower.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-    if (mapped) return isPublicAddress(mapped[1]);
-    if (lower === "::" || lower === "::1") return false;
-    if (/^f[cd]/.test(lower)) return false; // unique local fc00::/7
-    if (/^fe[89ab]/.test(lower)) return false; // link-local fe80::/10
-    if (/^ff/.test(lower)) return false; // multicast
-    if (lower.startsWith("2001:db8")) return false; // documentation
-    return true;
+  if (!net.isIPv6(ip)) return false;
+  const g = v6Groups(ip);
+  // ::ffff:a.b.c.d and the old ::a.b.c.d both reach IPv4 directly, so they
+  // are only as public as the IPv4 address inside them. Written in hex
+  // (::ffff:7f00:1 — which is how URL normalises them) they look nothing like
+  // 127.0.0.1, which is why this works on the numbers, not the text.
+  if (g.slice(0, 5).every((x) => x === 0) && (g[5] === 0xffff || g[5] === 0)) {
+    if (g[5] === 0 && g[6] === 0 && g[7] <= 1) return false; // :: and ::1
+    return isPublicAddress(groupsToV4(g[6], g[7]));
   }
-  return false;
+  // Everything else must be global unicast (2000::/3). That alone rules out
+  // loopback, link-local, unique-local, multicast and the NAT64 prefix.
+  if ((g[0] & 0xe000) !== 0x2000) return false;
+  if (g[0] === 0x2001 && g[1] === 0x0db8) return false; // documentation
+  if (g[0] === 0x2001 && g[1] === 0) return false; // Teredo tunnels
+  if (g[0] === 0x2002) return isPublicAddress(groupsToV4(g[1], g[2])); // 6to4 carries an IPv4 address
+  return true;
 }
 
 /** DNS lookup that refuses to hand the socket a non-public address. */
@@ -143,7 +168,7 @@ function once(url: URL, maxBytes: number, timeoutMs: number, accept: string): Pr
         const declared = Number(res.headers["content-length"] ?? 0);
         if (declared > maxBytes) {
           res.destroy();
-          return reject(new FetchRefused("That file is too large to import."));
+          return reject(new FetchRefused(TOO_LARGE));
         }
         const chunks: Buffer[] = [];
         let size = 0;
@@ -151,7 +176,7 @@ function once(url: URL, maxBytes: number, timeoutMs: number, accept: string): Pr
           size += c.length;
           if (size > maxBytes) {
             res.destroy();
-            reject(new FetchRefused("That file is too large to import."));
+            reject(new FetchRefused(TOO_LARGE));
             return;
           }
           chunks.push(c);
