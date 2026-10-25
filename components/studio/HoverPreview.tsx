@@ -93,7 +93,7 @@ export function PreviewStage({ product, active = true }: { product: Product | nu
 }
 
 /** Soft studio lighting plus a built-in reflection map, so metal reads as metal. */
-function Studio() {
+export function Studio() {
   const { gl, scene } = useThree();
   React.useEffect(() => {
     const pmrem = new PMREMGenerator(gl);

@@ -38,6 +38,8 @@ function findOwner(object: Object3D): {
     const ud = node.userData ?? {};
     if (ud.ghost) out.ghost = true;
     if (!node.visible) out.hidden = true;
+    // Grab areas exist to be tapped, not to be landed on.
+    if (ud.pickOnly) out.hidden = true;
     if (!out.itemId && typeof ud.itemId === "string") out.itemId = ud.itemId;
     if (!out.surfaceId && typeof ud.surfaceId === "string") {
       out.surfaceId = ud.surfaceId as SurfaceId;
@@ -141,12 +143,15 @@ export function DragController() {
   React.useEffect(() => {
     if (!draft) return;
 
+    // A fingertip hides whatever is under it, so on touch the item is aimed a
+    // little above the finger — you see it land instead of guessing.
+    const lift = (e: PointerEvent) => (e.pointerType === "touch" ? 56 : 0);
     const onMove = (e: PointerEvent) => {
       e.preventDefault();
-      resolveAt(e.clientX, e.clientY);
+      resolveAt(e.clientX, e.clientY - lift(e));
     };
     const onUp = (e: PointerEvent) => {
-      resolveAt(e.clientX, e.clientY);
+      resolveAt(e.clientX, e.clientY - lift(e));
       // Commit on the next tick so the resolve above lands in the store first.
       requestAnimationFrame(() => commitDraft());
       void e;
@@ -155,12 +160,26 @@ export function DragController() {
       if (e.key === "Escape") cancelDraft();
     };
 
+    // While something is being dragged, nothing on the page should become
+    // selected — a mouse drag across the panels otherwise highlights them,
+    // and a phone shows its selection handles over the room.
+    window.getSelection()?.removeAllRanges();
+    const noSelect = (e: Event) => e.preventDefault();
+    document.addEventListener("selectstart", noSelect);
+    const body = document.body.style;
+    const prevSelect = body.userSelect;
+    body.userSelect = "none";
+    body.setProperty("-webkit-user-select", "none");
+
     window.addEventListener("pointermove", onMove, { passive: false });
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", cancelDraft);
     window.addEventListener("keydown", onKey);
 
     return () => {
+      document.removeEventListener("selectstart", noSelect);
+      body.userSelect = prevSelect;
+      body.removeProperty("-webkit-user-select");
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", cancelDraft);

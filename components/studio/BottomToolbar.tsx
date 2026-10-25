@@ -4,6 +4,7 @@ import * as React from "react";
 import {
   Box,
   Camera,
+  Eye,
   Grid3x3,
   Image as ImageIcon,
   Move,
@@ -28,6 +29,7 @@ const CAMERA_OPTIONS: { value: CameraMode; label: string; icon: React.ReactNode 
 ];
 
 const TOOL_OPTIONS: { value: ToolMode; label: string; icon: React.ReactNode }[] = [
+  { value: "view", label: "View", icon: <Eye className="size-3.5" /> },
   { value: "select", label: "Select", icon: <MousePointer2 className="size-3.5" /> },
   { value: "move", label: "Move", icon: <Move className="size-3.5" /> },
 ];
@@ -50,7 +52,7 @@ export function BottomToolbar({ onOpenAr }: { onOpenAr: () => void }) {
   const issue = draft?.result?.issue ?? null;
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 flex flex-col items-center gap-2.5 px-4 pb-4">
+    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 flex flex-col items-center gap-2.5 px-3 pb-3 md:px-4 md:pb-4">
       {/* Live placement feedback sits directly above the toolbar so the eye
           doesn't have to leave the object being dragged */}
       <div
@@ -79,14 +81,16 @@ export function BottomToolbar({ onOpenAr }: { onOpenAr: () => void }) {
         </div>
       </div>
 
-      <div className="pointer-events-auto flex max-w-full flex-wrap items-center justify-center gap-1.5 rounded-[16px] glass-strong p-1.5 edge-light">
+      {/* One row that scrolls sideways on a narrow phone, rather than wrapping
+          into a second row that eats the room. */}
+      <div className="no-scrollbar pointer-events-auto flex max-w-full flex-nowrap items-center gap-1.5 overflow-x-auto rounded-[16px] glass-strong p-1.5 edge-light">
         <Segmented
           options={CAMERA_OPTIONS}
           value={cameraMode}
           onChange={setCameraMode}
           size="sm"
           compact
-          className="border-0 bg-transparent p-0"
+          className="shrink-0 border-0 bg-transparent p-0"
         />
 
         <span className="hidden h-6 w-px bg-white/10 sm:block" />
@@ -97,12 +101,12 @@ export function BottomToolbar({ onOpenAr }: { onOpenAr: () => void }) {
           onChange={setTool}
           size="sm"
           compact
-          className="border-0 bg-transparent p-0"
+          className="shrink-0 border-0 bg-transparent p-0"
         />
 
         <span className="hidden h-6 w-px bg-white/10 sm:block" />
 
-        <div className="flex items-center gap-0.5">
+        <div className="flex shrink-0 items-center gap-0.5">
           <IconButton
             label={gridSnap ? "Grid snapping on" : "Grid snapping off"}
             size="sm"
@@ -134,7 +138,7 @@ export function BottomToolbar({ onOpenAr }: { onOpenAr: () => void }) {
 
         <button
           onClick={onOpenAr}
-          className="inline-flex h-8 items-center gap-1.5 rounded-[9px] bg-white/7 px-3 text-[12.5px] font-medium text-chalk transition-all hover:bg-white/12"
+          className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[9px] bg-white/7 px-3 text-[12.5px] font-medium text-chalk transition-all hover:bg-white/12"
         >
           <Scan className="size-3.5" />
           AR

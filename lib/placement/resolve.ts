@@ -23,7 +23,9 @@ import {
   localBox,
   overlapDepths,
   stackSurface,
+  stackSurfaces,
   wallYaw,
+  type TopFace,
   worldBox,
 } from "./transform";
 import type {
@@ -352,8 +354,9 @@ function collidingItems(
     // The thing you are standing on is support, not an obstacle.
     if (candidate.supportId === other.id) continue;
     if (other.supportId === candidate.id) continue;
-    // Rugs and mats are surfaces, not walls — you stand things on them.
-    if (isFloorCovering(op) && !isFloorCovering(product)) continue;
+    // Rugs and mats are surfaces, not walls — you stand things on them, and
+    // a rug slides under the bed and sofa. Two rugs still keep apart.
+    if (isFloorCovering(op) !== isFloorCovering(product)) continue;
 
     let ignoreAxis: 0 | 1 | 2 | null = null;
     if (product.mount === "wall" && op.mount === "wall") {
@@ -618,6 +621,7 @@ export function resolvePlacement(
   let surfaceY = 0;
   let bounds: { min: [number, number]; max: [number, number] } | null = null;
   let point: Vec3 | null = null;
+  let shelfClear: number | undefined;
 
   // Stacking: dropping onto another object's top face.
   //
@@ -626,9 +630,10 @@ export function resolvePlacement(
   // makes a 2cm sliver the only target from a seated eye height, and missing
   // it drops the lamp on the floor and shoves it out from under the desk.
   if (wantsAnyHorizontal && ctx.hit?.itemId) {
-    const host = stackHostFor(ctx.hit.itemId, ctx.items);
+    const host = stackHostFor(ctx.hit.itemId, ctx.items, ctx.hit.point);
     if (host) {
       const { top } = host;
+      shelfClear = top.clear;
       supportId = host.item.id;
       surfaceY = top.y;
       bounds = { min: top.min, max: top.max };
@@ -645,6 +650,7 @@ export function resolvePlacement(
     if (shelf) {
       supportId = shelf.item.id;
       surfaceY = shelf.top.y;
+      shelfClear = shelf.top.clear;
       bounds = { min: shelf.top.min, max: shelf.top.max };
       point = [
         Math.max(shelf.top.min[0], Math.min(shelf.top.max[0], ctx.hit.point[0])),
@@ -768,17 +774,22 @@ export function resolvePlacement(
   });
   const [, itemH] = itemSize(product, scale, ctx.size);
   const tooTall = surfaceY + itemH > hRoom + 0.05;
+  const noHeadroom = shelfClear !== undefined && itemH > shelfClear + 0.005;
 
   return {
     item: pushed.item,
-    valid: pushed.resolved && !tooTall,
-    issue: tooTall ? "outside-room" : pushed.resolved ? null : "collides",
+    valid: pushed.resolved && !tooTall && !noHeadroom,
+    issue: tooTall
+      ? "outside-room"
+      : noHeadroom
+        ? "no-room-on-surface"
+        : pushed.resolved
+          ? null
+          : "collides",
     guides,
     stacked: supportId !== null,
   };
 }
-
-type TopFace = NonNullable<ReturnType<typeof stackSurface>>;
 
 /**
  * The object that would actually carry something dropped on `itemId`.
@@ -789,11 +800,12 @@ type TopFace = NonNullable<ReturnType<typeof stackSurface>>;
 function stackHostFor(
   itemId: string,
   items: PlacedItem[],
+  near?: Vec3,
 ): { item: PlacedItem; top: TopFace } | null {
   let current = items.find((i) => i.id === itemId);
   for (let depth = 0; current && depth < 8; depth++) {
     const product = productById(current.productId);
-    const top = product ? stackSurface(current, product) : null;
+    const top = product ? stackSurface(current, product, near) : null;
     if (top) return { item: current, top };
     const below: string | null = current.supportId;
     current = below ? items.find((i) => i.id === below) : undefined;
@@ -804,6 +816,13 @@ function stackHostFor(
 /** Where on a top face the cursor means, wherever on its host it landed. */
 function pointOnTop(hit: RayHit, ray: Ray | null, top: TopFace): Vec3 {
   if (hit.normal[1] > 0.5 && Math.abs(hit.point[1] - top.y) < 0.03) return hit.point;
+  if (top.clear !== undefined) {
+    return [
+      Math.max(top.min[0], Math.min(top.max[0], hit.point[0])),
+      top.y,
+      Math.max(top.min[1], Math.min(top.max[1], hit.point[2])),
+    ];
+  }
 
   // Through the plane of the top, if the ray crosses it near the host. From
   // below the top (a low camera looking at a desk's front) the crossing is
@@ -837,14 +856,14 @@ function shelfNear(p: Vec3, items: PlacedItem[]): { item: PlacedItem; top: TopFa
   for (const it of items) {
     const prod = productById(it.productId);
     if (!prod || prod.mount !== "wall") continue;
-    const top = stackSurface(it, prod);
-    if (!top) continue;
-    const M = 0.06;
-    const inX = p[0] > top.min[0] - M && p[0] < top.max[0] + M;
-    const inZ = p[2] > top.min[1] - M && p[2] < top.max[1] + M;
-    const dy = p[1] - top.y;
-    if (!inX || !inZ || dy < -0.06 || dy > 0.45) continue;
-    if (!best || Math.abs(dy) < Math.abs(best.dy)) best = { item: it, top, dy };
+    for (const top of stackSurfaces(it, prod)) {
+      const M = 0.06;
+      const inX = p[0] > top.min[0] - M && p[0] < top.max[0] + M;
+      const inZ = p[2] > top.min[1] - M && p[2] < top.max[1] + M;
+      const dy = p[1] - top.y;
+      if (!inX || !inZ || dy < -0.06 || dy > Math.min(0.45, (top.clear ?? 0.45) + 0.02)) continue;
+      if (!best || Math.abs(dy) < Math.abs(best.dy)) best = { item: it, top, dy };
+    }
   }
   return best;
 }
@@ -877,7 +896,22 @@ export function placeOnSurface(
   if (product.mount !== "tabletop") return null;
   const host = stackHostFor(hostId, ctx.items);
   if (!host) return null;
-  const { top } = host;
+  const hostProduct = productById(host.item.productId);
+  const faces = hostProduct ? stackSurfaces(host.item, hostProduct) : [host.top];
+  faces.sort((a, b) => b.y - a.y);
+  for (const top of faces) {
+    const placed = placeOnFace(product, host.item.id, top, ctx);
+    if (placed) return placed;
+  }
+  return null;
+}
+
+function placeOnFace(
+  product: Product,
+  hostId: string,
+  top: TopFace,
+  ctx: Omit<ResolveContext, "hit" | "ray">,
+): PlacementResult | null {
   const cx = (top.min[0] + top.max[0]) / 2;
   const cz = (top.min[1] + top.max[1]) / 2;
   const spanX = top.max[0] - top.min[0];
@@ -891,7 +925,7 @@ export function placeOnSurface(
       const z = along === 2 ? cz + (f * spanZ) / 2 : cz + (g * spanZ) / 2;
       const result = resolvePlacement(product, {
         ...ctx,
-        hit: { point: [x, top.y, z], normal: [0, 1, 0], itemId: host.item.id },
+        hit: { point: [x, top.y, z], normal: [0, 1, 0], itemId: hostId },
         ray: null,
       });
       if (result?.valid) return result;
@@ -930,7 +964,7 @@ export function settleItems(items: PlacedItem[]): PlacedItem[] {
     if (supportStillThere && item.supportId) {
       const host = result.find((r) => r.id === item.supportId);
       const hp = host ? productById(host.productId) : undefined;
-      const top = host && hp ? stackSurface(host, hp) : null;
+      const top = host && hp ? stackSurface(host, hp, item.position) : null;
       if (top) {
         item.position = [item.position[0], top.y, item.position[2]];
         continue;
@@ -945,13 +979,20 @@ export function settleItems(items: PlacedItem[]): PlacedItem[] {
       if (other.id === item.id) continue;
       const op = productById(other.productId);
       if (!op) continue;
-      const top = stackSurface(other, op);
+      // A bed or wardrobe standing on a rug is not "on" it: moving the rug
+      // must not drag the furniture along. Plants and stools do ride on it.
+      if (isFloorCovering(op) && !isFloorCovering(product)) {
+        const [rw, , rd] = itemSize(op, other.scale, other.size);
+        const [iw, , idp] = itemSize(product, item.scale, item.size);
+        if (product.isFurniture || iw * idp > rw * rd * 0.3) continue;
+      }
+      for (const top of stackSurfaces(other, op)) {
       // Surfaces below the item catch it as it falls. A surface slightly ABOVE
       // its base counts too, within the thickness of a floor covering: a plant
       // dropped on the floor inside a rug's footprint is standing on the rug,
       // not clipping through it. The tolerance stays under the shortest real
       // furniture so nothing gets sucked up onto a table it was never near.
-      if (!top || top.y > item.position[1] + CLIMB_TOLERANCE) continue;
+      if (top.y > item.position[1] + CLIMB_TOLERANCE) continue;
 
       const [w, , d] = itemSize(product, item.scale, item.size);
       const [hx, hz] = rotatedHalfExtents(w, d, item.yaw);
@@ -963,6 +1004,7 @@ export function settleItems(items: PlacedItem[]): PlacedItem[] {
       if (overlapsX && overlapsZ && top.y >= restY) {
         restY = top.y;
         newSupport = other.id;
+      }
       }
     }
 

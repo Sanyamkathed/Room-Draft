@@ -148,8 +148,9 @@ export function buildCustomProduct(input: {
     tags: ["custom", "mine", ...name.toLowerCase().split(/\s+/).slice(0, 6)],
     rating: 0,
     reviews: 0,
-    // Flat-topped boxes and wide standees can hold things; images generally can't.
-    stackable: !input.spec.image && input.spec.shape === "box",
+    // Rugs and anything the user said can hold things; plain boxes too.
+    stackable:
+      input.spec.holds ?? (input.spec.style === "rug" || (!input.spec.image && input.spec.shape === "box")),
     query: name,
     custom: { ...input.spec, createdAt: input.spec.createdAt ?? now, updatedAt: now },
   };

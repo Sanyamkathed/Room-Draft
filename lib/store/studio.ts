@@ -5,7 +5,7 @@ import { productById } from "@/lib/catalog/source";
 import type { AestheticId } from "@/lib/catalog/types";
 import { resolvePlacement, settleItems } from "@/lib/placement/resolve";
 import { carryDependents, dependentsOf } from "@/lib/placement/carry";
-import { stackSurface } from "@/lib/placement/transform";
+import { stackSurface, stackSurfaces } from "@/lib/placement/transform";
 import type { PlacedItem, PlacementResult } from "@/lib/placement/types";
 import { buildRoomFromPlan } from "@/lib/room/plan";
 import { reconstructRoom } from "@/lib/room/reconstruct";
@@ -20,7 +20,16 @@ import { storage } from "@/lib/storage/idb";
 import type { Project } from "@/lib/storage/types";
 
 export type CameraMode = "orbit" | "first" | "top" | "photo";
-export type ToolMode = "select" | "move" | "rotate" | "scale";
+/** "view" is look-only: touching the room never selects or picks anything up. */
+export type ToolMode = "view" | "select" | "move" | "rotate" | "scale";
+
+/**
+ * How much of a phone screen the bottom sheet takes. "peek" leaves the room
+ * mostly visible (after placing something, while dragging); "half" browses;
+ * "full" searches. Desktop ignores it — panels are side rails there.
+ */
+export type SheetSize = "peek" | "half" | "full";
+export const SHEET_HEIGHT: Record<SheetSize, number> = { peek: 0.3, half: 0.52, full: 0.86 };
 
 /** Snapshot of the state undo cares about. */
 interface Snapshot {
@@ -55,6 +64,7 @@ interface StudioState {
   photoTexture: boolean;
   leftPanelOpen: boolean;
   rightPanelOpen: boolean;
+  sheetSize: SheetSize;
 
   /**
    * The in-flight drag. Covers both cases with one shape: dragging a product
@@ -105,6 +115,7 @@ interface StudioState {
   setShowOriginal: (v: boolean) => void;
   setPhotoTexture: (v: boolean) => void;
   setLeftPanel: (v: boolean) => void;
+  setSheetSize: (v: SheetSize) => void;
   setRightPanel: (v: boolean) => void;
   setAesthetic: (a: AestheticId | null) => void;
 
@@ -177,6 +188,7 @@ export const useStudio = create<StudioState>((set, get) => {
     // The inspector has nothing to show until something is selected, and it
     // costs the viewport 286px — so it opens on selection rather than by default.
     rightPanelOpen: false,
+    sheetSize: "half",
     draft: null,
     interacting: false,
     past: [],
@@ -346,7 +358,7 @@ export const useStudio = create<StudioState>((set, get) => {
       if (hostId) {
         const host = items.find((i) => i.id === hostId);
         const hp = host ? productById(host.productId) : undefined;
-        const top = host && hp ? stackSurface(host, hp) : null;
+        const top = host && hp ? stackSurface(host, hp, item.position) : null;
         const [x, y, z] = item.position;
         if (
           !top ||
@@ -361,15 +373,15 @@ export const useStudio = create<StudioState>((set, get) => {
         for (const other of items) {
           if (other.id === id) continue;
           const op = productById(other.productId);
-          const top = op ? stackSurface(other, op) : null;
-          if (!top) continue;
-          const [x, , z] = item.position;
-          if (x < top.min[0] || x > top.max[0] || z < top.min[1] || z > top.max[1]) continue;
-          // Explicit height above the floor: only hosts at or below it.
-          if (item.position[1] > 0.05 && top.y > item.position[1] + 0.05) continue;
-          if (top.y > bestY) {
-            bestY = top.y;
-            hostId = other.id;
+          for (const top of op ? stackSurfaces(other, op) : []) {
+            const [x, , z] = item.position;
+            if (x < top.min[0] || x > top.max[0] || z < top.min[1] || z > top.max[1]) continue;
+            // Explicit height above the floor: only hosts at or below it.
+            if (item.position[1] > 0.05 && top.y > item.position[1] + 0.05) continue;
+            if (top.y > bestY) {
+              bestY = top.y;
+              hostId = other.id;
+            }
           }
         }
       }
@@ -479,11 +491,13 @@ export const useStudio = create<StudioState>((set, get) => {
 
     select: (id) => set({ selectedId: id, rightPanelOpen: id ? true : get().rightPanelOpen }),
     setCameraMode: (cameraMode) => set({ cameraMode }),
-    setTool: (tool) => set({ tool }),
+    setTool: (tool) =>
+      set(tool === "view" ? { tool, selectedId: null, draft: null } : { tool }),
     toggleGridSnap: () => set((s) => ({ gridSnap: !s.gridSnap })),
     setShowOriginal: (showOriginal) => set({ showOriginal }),
     setPhotoTexture: (photoTexture) => set({ photoTexture }),
     setLeftPanel: (leftPanelOpen) => set({ leftPanelOpen }),
+    setSheetSize: (sheetSize) => set({ sheetSize }),
     setRightPanel: (rightPanelOpen) => set({ rightPanelOpen }),
     setAesthetic: (aesthetic) => {
       const { project } = get();
@@ -549,3 +563,4 @@ export function useSelected() {
   const product = item ? productById(item.productId) ?? null : null;
   return { item, product };
 }
+

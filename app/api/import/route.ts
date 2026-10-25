@@ -146,6 +146,47 @@ function siteName(u: URL): string {
   return host.slice(0, 40);
 }
 
+/**
+ * The largest usable version of an image.
+ *
+ * Pinterest's page advertises a 736px preview, but the same pin is served at
+ * 1200px and as the uploader's original — often a PNG that is ALREADY cut
+ * out, which is exactly what a decor item wants. Try the original, then
+ * 1200px, then the advertised one; anything over the size cap falls through
+ * to the next.
+ */
+async function bestImage(src: string) {
+  const accept = "image/avif,image/webp,image/*,*/*;q=0.5";
+  const candidates: string[] = [];
+  try {
+    const u = new URL(src);
+    if (/(^|\.)pinimg\.com$/.test(u.hostname) && /^\/(\d+x\d*|originals)\//.test(u.pathname)) {
+      for (const size of ["originals", "1200x"]) {
+        const v = new URL(u);
+        v.pathname = u.pathname.replace(/^\/(\d+x\d*|originals)\//, `/${size}/`);
+        if (v.toString() !== src) candidates.push(v.toString());
+      }
+    }
+  } catch {
+    /* not a URL we can rewrite */
+  }
+  candidates.push(src);
+
+  let last: Awaited<ReturnType<typeof safeGet>> | null = null;
+  for (const c of candidates) {
+    try {
+      const res = await safeGet(c, { maxBytes: MAX_IMAGE, accept });
+      if (res.status < 400 && sniffImage(res.body)) return res;
+      last = res;
+    } catch (e) {
+      // Too large or unreachable: try the next size down. The last one's
+      // error is the one worth reporting.
+      if (c === src) throw e;
+    }
+  }
+  return last!;
+}
+
 /* ---------------- handler ---------------- */
 
 export async function POST(req: Request) {
@@ -182,13 +223,21 @@ export async function POST(req: Request) {
       imageBytes = page.body;
     } else {
       found = parsePage(page.body.toString("utf8"), page.url);
+      // A dead or mistyped pin lands on Pinterest's home page, whose share
+      // image is a collage of stock photos — never the product.
+      if (/pinterest\./i.test(new URL(page.url).hostname) && /^pinterest(\s+\w+)?$/i.test(found.title?.trim() ?? "")) {
+        return NextResponse.json(
+          { error: "That pin couldn't be found — check the link (pin.it links are case-sensitive)." },
+          { status: 404 },
+        );
+      }
       if (!found.image) {
         return NextResponse.json(
           { error: "Couldn't find a product image on that page. Try saving the image and uploading it instead." },
           { status: 422 },
         );
       }
-      const img = await safeGet(found.image, { maxBytes: MAX_IMAGE, accept: "image/avif,image/webp,image/*,*/*;q=0.5" });
+      const img = await bestImage(found.image);
       if (img.status === 429) {
         return NextResponse.json({ error: "That site is limiting requests right now — try again in a minute." }, { status: 502 });
       }
