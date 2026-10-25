@@ -1,13 +1,17 @@
 "use client";
 
 import * as React from "react";
-import { useFrame } from "@react-three/fiber";
+import { useFrame, useThree } from "@react-three/fiber";
 import {
   AdditiveBlending,
+  BufferGeometry,
+  TubeGeometry,
   BackSide,
   CanvasTexture,
   CatmullRomCurve3,
+  CubeCamera,
   DoubleSide,
+  HalfFloatType,
   IcosahedronGeometry,
   PlaneGeometry,
   Quaternion,
@@ -17,7 +21,9 @@ import {
   Texture,
   Vector2,
   Vector3,
+  WebGLCubeRenderTarget,
   type Group,
+  type Mesh,
   type Object3D,
   type SpotLight as ThreeSpotLight,
 } from "three";
@@ -38,7 +44,8 @@ import {
 import { FURNITURE_MODELS } from "./FurnitureModel";
 import { bledCanvas, inflatedGeometry } from "@/lib/three/inflate";
 import { FinishMaterial, MergedBoxes, Slab, useSeeded } from "./finish";
-import { M, catenary, leafShape, neonCurve, seededRandom } from "./shapes";
+import { fitStrokes, neonStrokes } from "./neon";
+import { M, catenary, leafShape, seededRandom } from "./shapes";
 
 /**
  * Procedural geometry for every product in the catalog.
@@ -334,71 +341,130 @@ function PhotoGrid({ product }: ModelProps) {
 }
 
 function NeonSign({ product, light, lightScale = 1 }: ModelProps) {
-  const curve = React.useMemo(() => neonCurve(product), [product]);
   const w = M(product.dims.w);
   const h = M(product.dims.h);
-  const tubeR = Math.min(w, h) * 0.03;
-  const colour = product.emissive?.color ?? product.palette[0];
+  const base = product.emissive?.color ?? product.palette[0];
+  // Real LED neon flex is ~8-9mm across, whatever the size of the sign.
+  const tubeR = 0.0045;
+
+  const built = React.useMemo(() => {
+    const { curves, width, height } = fitStrokes(neonStrokes(product), w, h);
+    type Acc = {
+      core: BufferGeometry[];
+      shell: BufferGeometry[];
+      inner: BufferGeometry[];
+      min: Vector2;
+      max: Vector2;
+    };
+    const groups = new Map<string, Acc>();
+    for (const { curve, colour } of curves) {
+      const c = colour ?? base;
+      let g = groups.get(c);
+      if (!g) {
+        g = { core: [], shell: [], inner: [], min: new Vector2(Infinity, Infinity), max: new Vector2(-Infinity, -Infinity) };
+        groups.set(c, g);
+      }
+      const segs = Math.max(12, Math.min(400, Math.round(curve.getLength() / 0.004)));
+      g.core.push(new TubeGeometry(curve, segs, tubeR, 8, false));
+      g.shell.push(new TubeGeometry(curve, segs, tubeR * 2.6, 6, false));
+      g.inner.push(new TubeGeometry(curve, segs, tubeR * 0.45, 6, false));
+      for (const p of curve.getPoints(24)) {
+        g.min.min(new Vector2(p.x, p.y));
+        g.max.max(new Vector2(p.x, p.y));
+      }
+    }
+    // One mesh per colour and layer, however many letters share it.
+    const merged = [...groups.entries()].map(([colour, g]) => {
+      const out = {
+        colour,
+        core: mergeGeometries(g.core, false)!,
+        shell: mergeGeometries(g.shell, false)!,
+        inner: mergeGeometries(g.inner, false)!,
+        centre: g.min.clone().add(g.max).multiplyScalar(0.5),
+        size: g.max.clone().sub(g.min),
+      };
+      [...g.core, ...g.shell, ...g.inner].forEach((geo) => geo.dispose());
+      return out;
+    });
+    return { groups: merged, width, height };
+  }, [product, w, h, base]);
+
+  React.useEffect(
+    () => () => built.groups.forEach((g) => [g.core, g.shell, g.inner].forEach((geo) => geo.dispose())),
+    [built],
+  );
+
+  // The acrylic is cut a little larger than the design, like the real thing.
+  const plateW = Math.min(w, built.width + 0.04);
+  const plateH = Math.min(h, built.height + 0.04);
+  const tubeZ = 0.011 + tubeR;
+  const glowOpacity = 0.5 / Math.sqrt(built.groups.length);
 
   return (
     <group>
-      {/* Light thrown onto the wall behind. Deliberately NOT a backplate: a
-          dark panel occludes the wall instead of lighting it, which is exactly
-          what makes a sign read as a floating rectangle. */}
-      <WallGlow colour={colour} width={w} height={h} spread={2.4} opacity={0.55} />
+      {/* Light thrown onto the wall behind, per colour. Real neon lights the
+          wall around it; without that spill a sign reads as a sticker. */}
+      {built.groups.map((g) => (
+        <group key={`glow-${g.colour}`} position={[g.centre.x, g.centre.y, 0]}>
+          <WallGlow
+            colour={g.colour}
+            width={Math.max(g.size.x, 0.06)}
+            height={Math.max(g.size.y, 0.06)}
+            spread={2.3}
+            opacity={glowOpacity}
+          />
+        </group>
+      ))}
 
-      {/* Clear acrylic the tube is actually mounted on — visible only as a
-          faint edge, the way real acrylic is. */}
-      <mesh position={[0, 0, 0.008]}>
-        <boxGeometry args={[w, h, 0.005]} />
+      {/* Clear acrylic backing the tube is screwed to — seen only as a faint
+          sheet and a bright edge, the way real acrylic is. */}
+      <RoundedBox args={[plateW, plateH, 0.005]} radius={0.012} smoothness={3} position={[0, 0, 0.0065]}>
         <meshPhysicalMaterial
           color="#ffffff"
-          roughness={0.05}
+          roughness={0.04}
           metalness={0}
-          transmission={0.96}
-          thickness={0.004}
-          ior={1.49}
+          clearcoat={1}
           transparent
-          opacity={0.18}
+          opacity={0.09}
           depthWrite={false}
         />
-      </mesh>
+      </RoundedBox>
 
-      {/* Standoff pins, so it sits off the wall like the real thing */}
+      {/* Standoff screws at the plate's corners */}
       {([-1, 1] as const).map((sx) =>
         ([-1, 1] as const).map((sy) => (
           <mesh
             key={`${sx}${sy}`}
-            position={[sx * (w / 2 - 0.02), sy * (h / 2 - 0.02), 0.005]}
+            position={[sx * (plateW / 2 - 0.016), sy * (plateH / 2 - 0.016), 0.006]}
             rotation={[Math.PI / 2, 0, 0]}
           >
-            <cylinderGeometry args={[0.004, 0.004, 0.011, 8]} />
-            <meshStandardMaterial color="#c8ccd2" roughness={0.25} metalness={0.9} />
+            <cylinderGeometry args={[0.0045, 0.0045, 0.012, 10]} />
+            <meshStandardMaterial color="#d6d9de" roughness={0.2} metalness={0.95} />
           </mesh>
         )),
       )}
 
-      {/* Outer bloom shell, then the hot core. Two passes read as glass with
-          gas inside it; one pass reads as a coloured wire. */}
-      <mesh position={[0, 0, 0.022]}>
-        <tubeGeometry args={[curve, 110, tubeR * 2.6, 6, false]} />
-        <meshBasicMaterial
-          color={colour}
-          transparent
-          opacity={0.16}
-          blending={AdditiveBlending}
-          toneMapped={false}
-          depthWrite={false}
-        />
-      </mesh>
-      <mesh position={[0, 0, 0.022]}>
-        <tubeGeometry args={[curve, 150, tubeR, 10, false]} />
-        <meshBasicMaterial color={colour} toneMapped={false} />
-      </mesh>
-      <mesh position={[0, 0, 0.022]}>
-        <tubeGeometry args={[curve, 150, tubeR * 0.45, 8, false]} />
-        <meshBasicMaterial color="#ffffff" toneMapped={false} opacity={0.85} transparent />
-      </mesh>
+      {/* Each colour: soft bloom shell, coloured tube, white-hot core. */}
+      {built.groups.map((g) => (
+        <group key={g.colour} position={[0, 0, tubeZ]}>
+          <mesh geometry={g.shell}>
+            <meshBasicMaterial
+              color={g.colour}
+              transparent
+              opacity={0.16}
+              blending={AdditiveBlending}
+              toneMapped={false}
+              depthWrite={false}
+            />
+          </mesh>
+          <mesh geometry={g.core}>
+            <meshBasicMaterial color={g.colour} toneMapped={false} />
+          </mesh>
+          <mesh geometry={g.inner}>
+            <meshBasicMaterial color="#ffffff" toneMapped={false} transparent opacity={0.8} />
+          </mesh>
+        </group>
+      ))}
 
       <ProductLight product={product} enabled={light} scale={lightScale} position={[0, 0, 0.18]} />
     </group>
@@ -451,7 +517,7 @@ function Mirror({ product }: ModelProps) {
   const w = M(product.dims.w);
   const h = M(product.dims.h);
   const d = M(product.dims.d);
-  const [frame, glass] = product.palette;
+  const [frame] = product.palette;
   const round = Math.abs(w - h) < Math.min(w, h) * 0.12;
 
   // An arched mirror is a rectangle capped with a semicircle; building it as a
@@ -469,15 +535,6 @@ function Mirror({ product }: ModelProps) {
     return s;
   }, [round, w, h]);
 
-  const mirrorMat = (
-    <meshStandardMaterial
-      color={glass}
-      roughness={0.03}
-      metalness={1}
-      envMapIntensity={2.4}
-    />
-  );
-
   if (round) {
     const r = w / 2;
     return (
@@ -486,10 +543,7 @@ function Mirror({ product }: ModelProps) {
           <cylinderGeometry args={[r, r, d, 48]} />
           <meshStandardMaterial color={frame} roughness={0.5} metalness={0.3} />
         </mesh>
-        <mesh position={[0, 0, d + 0.001]}>
-          <circleGeometry args={[r * 0.93, 48]} />
-          {mirrorMat}
-        </mesh>
+        <MirrorGlass shape={<circleGeometry args={[r * 0.93, 48]} />} position={[0, 0, d + 0.002]} />
       </group>
     );
   }
@@ -500,10 +554,11 @@ function Mirror({ product }: ModelProps) {
         <extrudeGeometry args={[archShape!, { depth: d, bevelEnabled: false }]} />
         <meshStandardMaterial color={frame} roughness={0.45} metalness={0.35} />
       </mesh>
-      <mesh position={[0, 0, d + 0.001]} scale={[0.93, 0.95, 1]}>
-        <extrudeGeometry args={[archShape!, { depth: 0.002, bevelEnabled: false }]} />
-        {mirrorMat}
-      </mesh>
+      <MirrorGlass
+        shape={<shapeGeometry args={[archShape!]} />}
+        position={[0, 0, d + 0.002]}
+        scale={[0.93, 0.95, 1]}
+      />
     </group>
   );
 }
@@ -2819,6 +2874,9 @@ function SculptedCutout({
   d,
   flatBack,
   glow,
+  grounded = false,
+  squareness = 2,
+  fillBase = false,
 }: {
   texture: Texture;
   cacheKey: string;
@@ -2827,6 +2885,9 @@ function SculptedCutout({
   d: number;
   flatBack: boolean;
   glow?: string;
+  grounded?: boolean;
+  squareness?: number;
+  fillBase?: boolean;
 }) {
   const geometry = React.useMemo(
     () =>
@@ -2835,8 +2896,11 @@ function SculptedCutout({
         height: h,
         depth: d,
         flatBack,
+        grounded,
+        squareness,
+        fillBase,
       }),
-    [cacheKey, texture, w, h, d, flatBack],
+    [cacheKey, texture, w, h, d, flatBack, grounded, squareness, fillBase],
   );
   // An opaque copy with the edge colours bled outward — the mesh defines the
   // silhouette, so the rim must not sample transparent fringe.
@@ -2852,6 +2916,7 @@ function SculptedCutout({
     <mesh geometry={geometry} castShadow receiveShadow>
       <meshStandardMaterial
         map={solid}
+        vertexColors
         roughness={0.55}
         metalness={0}
         emissive={glow}
@@ -2862,8 +2927,94 @@ function SculptedCutout({
   );
 }
 
-/** Turns its children about Y to face the camera, keeping them upright. */
-function FaceCamera({ children }: { children: React.ReactNode }) {
+const _mirrorPos = new Vector3();
+
+/**
+ * Mirror glass that reflects the actual room.
+ *
+ * A cube camera captures the scene from where the mirror stands, with the
+ * glass hidden, and the glass shows that capture. It re-captures only once
+ * the mirror has stayed put for a few frames — six small renders after a
+ * move, not a second scene render every frame, which a phone can't afford.
+ */
+function MirrorGlass({
+  shape,
+  mask,
+  position,
+  scale,
+}: {
+  /** The glass outline as a geometry element (a plane, a circle, an arch). */
+  shape: React.ReactNode;
+  /** Cuts the glass to a photo's mirror opening (alpha = glass). */
+  mask?: Texture;
+  position?: Vec3;
+  scale?: Vec3;
+}) {
+  const gl = useThree((st) => st.gl);
+  const scene = useThree((st) => st.scene);
+  const target = React.useMemo(() => new WebGLCubeRenderTarget(256, { type: HalfFloatType }), []);
+  const camera = React.useMemo(() => new CubeCamera(0.05, 30, target), [target]);
+  const mesh = React.useRef<Mesh>(null);
+  const last = React.useRef(new Vector3(Infinity, 0, 0));
+  const still = React.useRef(0);
+  const [ready, setReady] = React.useState(false);
+  React.useEffect(() => () => target.dispose(), [target]);
+
+  useFrame(() => {
+    const m = mesh.current;
+    if (!m) return;
+    m.getWorldPosition(_mirrorPos);
+    if (_mirrorPos.distanceToSquared(last.current) > 1e-6) {
+      last.current.copy(_mirrorPos);
+      still.current = 6;
+      return;
+    }
+    if (still.current > 0 && --still.current === 0) {
+      camera.position.copy(_mirrorPos);
+      m.visible = false;
+      // The walls hidden so the user can see into the room are still there
+      // for the mirror — a mirror facing the open side reflects that wall.
+      const shown: Object3D[] = [];
+      scene.traverse((o) => {
+        if (o.userData.isRoom && !o.visible) {
+          o.visible = true;
+          shown.push(o);
+        }
+      });
+      camera.update(gl, scene);
+      for (const o of shown) o.visible = false;
+      m.visible = true;
+      if (!ready) setReady(true);
+    }
+  });
+
+  // A basic material reads the capture as a plain cube map: a perfect mirror
+  // needs no blur, so it skips the prefiltering a standard material does.
+  const cut = mask ? { map: mask, alphaTest: 0.5 } : {};
+  return (
+    <group position={position} scale={scale}>
+      <mesh ref={mesh}>
+        {shape}
+        {ready ? (
+          <meshBasicMaterial {...cut} envMap={target.texture} color="#f1f5f7" />
+        ) : (
+          <meshStandardMaterial {...cut} color="#c9d2d8" roughness={0.05} metalness={0.9} />
+        )}
+      </mesh>
+      {/* The back of a mirror is its backing board, not more glass. */}
+      <mesh position={[0, 0, -0.002]}>
+        {shape}
+        <meshStandardMaterial {...cut} color="#3b3a38" roughness={0.9} side={BackSide} />
+      </mesh>
+    </group>
+  );
+}
+
+/**
+ * Turns its children about Y to face the camera, keeping them upright.
+ * `limit` caps the turn either side of the placed direction, in radians.
+ */
+function FaceCamera({ children, limit = Math.PI }: { children: React.ReactNode; limit?: number }) {
   const ref = React.useRef<Group>(null);
   const v = React.useMemo(() => new Vector3(), []);
   useFrame(({ camera }) => {
@@ -2871,7 +3022,8 @@ function FaceCamera({ children }: { children: React.ReactNode }) {
     if (!g?.parent) return;
     v.copy(camera.position);
     g.parent.worldToLocal(v);
-    g.rotation.y = Math.atan2(v.x, v.z);
+    const a = Math.atan2(v.x, v.z);
+    g.rotation.y = Math.max(-limit, Math.min(limit, a));
   });
   return <group ref={ref}>{children}</group>;
 }
@@ -2884,6 +3036,7 @@ function CustomModel({ product, light, lightScale = 1 }: ModelProps) {
   const glow = product.emissive?.color;
   const texKey = `${product.id}:${spec?.updatedAt ?? 0}`;
   const texture = useCustomImageTexture(texKey, spec?.image);
+  const glassTex = useCustomImageTexture(`${texKey}:glass`, spec?.glass);
   const mount = product.mount;
 
   // ---- Plain shape: no photo, just a well-finished primitive ----
@@ -2927,11 +3080,36 @@ function CustomModel({ product, light, lightScale = 1 }: ModelProps) {
   const style = spec.style;
   const t = style === "flat" ? 0 : Math.min(0.03, Math.max(0.006, d * 0.25));
 
+  // ---- Rug: the photo laid on the floor, w × d, with a little pile ----
+  if (style === "rug") {
+    const pile = Math.max(0.003, Math.min(h, 0.02));
+    return (
+      <group>
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, pile, 0]} receiveShadow>
+          <planeGeometry args={[w, d]} />
+          <meshStandardMaterial map={texture} alphaTest={0.4} roughness={0.95} metalness={0} />
+        </mesh>
+        {/* The underside edge, so it reads as a mat with thickness, not a decal. */}
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, pile * 0.4, 0]} scale={[1.004, 1.004, 1]}>
+          <planeGeometry args={[w, d]} />
+          <meshStandardMaterial map={texture} alphaTest={0.4} color="#6f6a64" roughness={1} />
+        </mesh>
+      </group>
+    );
+  }
+
+  // The reflective glass of a mirror, shaped by the mask the frame encloses.
+  const glassAt = (z: number) =>
+    glassTex ? (
+      <MirrorGlass mask={glassTex} shape={<planeGeometry args={[w, h]} />} position={[0, 0, z]} />
+    ) : null;
+
   // ---- Wall: flat against the wall, or proud of it with real thickness ----
   if (mount === "wall") {
     return (
       <group>
         {glow ? <WallGlow colour={glow} width={w} height={h} spread={2.2} opacity={0.5} /> : null}
+        {glassAt(0.005)}
         {style === "sculpted" ? (
           <group position={[0, 0, 0.002]}>
             <SculptedCutout texture={texture} cacheKey={texKey} w={w} h={h} d={Math.max(0.01, d)} flatBack glow={glow} />
@@ -2962,7 +3140,19 @@ function CustomModel({ product, light, lightScale = 1 }: ModelProps) {
   const y = mount === "ceiling" ? -h / 2 : h / 2;
   const body =
     style === "sculpted" ? (
-      <SculptedCutout texture={texture} cacheKey={texKey} w={w} h={h} d={Math.max(0.01, d)} flatBack={false} glow={glow} />
+      <SculptedCutout
+        texture={texture}
+        cacheKey={texKey}
+        w={w}
+        h={h}
+        d={Math.max(0.01, d)}
+        flatBack={false}
+        glow={glow}
+        // Standing things rest on a flat base; furniture gets square shoulders.
+        grounded={mount !== "ceiling"}
+        squareness={mount === "floor" && !spec.glass ? 2.4 : 2}
+        fillBase={mount === "floor" && !spec.glass}
+      />
     ) : style === "flat" ? (
       <mesh castShadow>
         <planeGeometry args={[w, h]} />
@@ -2974,7 +3164,18 @@ function CustomModel({ product, light, lightScale = 1 }: ModelProps) {
 
   return (
     <group position={[0, y, 0]}>
-      {style === "facing" ? <FaceCamera>{body}</FaceCamera> : body}
+      {style === "facing" ? (
+        <FaceCamera>{body}</FaceCamera>
+      ) : style === "sculpted" && !spec.glass && mount !== "ceiling" ? (
+        // One photo shows one side; seen from the side or behind, a shape
+        // puffed out of it smears into streaks. So it always shows the side
+        // that was photographed — with real depth, shading and a flat base,
+        // it still reads as a solid object rather than a cardboard cutout.
+        <FaceCamera>{body}</FaceCamera>
+      ) : (
+        body
+      )}
+      {style === "facing" ? null : glassAt(0)}
       <ProductLight product={product} enabled={light} scale={lightScale} position={[0, 0, 0.15]} />
     </group>
   );

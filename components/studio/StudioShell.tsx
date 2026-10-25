@@ -11,7 +11,7 @@ import {
   Sparkles,
   Trash2,
 } from "lucide-react";
-import { useStudio } from "@/lib/store/studio";
+import { SHEET_HEIGHT, useStudio, type SheetSize } from "@/lib/store/studio";
 import { downloadDataUrl } from "@/lib/utils/image";
 import { Button, IconButton } from "@/components/ui/primitives";
 import { cn } from "@/lib/utils/cn";
@@ -49,12 +49,28 @@ export function StudioShell() {
   const setLeftOpen = useStudio((s) => s.setLeftPanel);
   const rightOpen = useStudio((s) => s.rightPanelOpen);
   const setRightOpen = useStudio((s) => s.setRightPanel);
+  const sheetSize = useStudio((s) => s.sheetSize);
+  const setSheetSize = useStudio((s) => s.setSheetSize);
+  const draft = useStudio((s) => s.draft);
+  // View mode on a phone: the sheets step aside and the room gets the screen.
+  const viewing = useStudio((s) => s.tool === "view");
+  // Live height while the handle is being dragged; snaps on release.
+  const [dragHeight, setDragHeight] = React.useState<number | null>(null);
+  const sheetFraction = dragHeight ?? SHEET_HEIGHT[sheetSize];
+
+  // Placing something from the sheet needs the room, not the list: shrink the
+  // sheet out of the way while a new item is being dragged in.
+  React.useEffect(() => {
+    if (draft && !draft.itemId && window.matchMedia("(max-width: 767px)").matches) {
+      setSheetSize("peek");
+    }
+  }, [draft, setSheetSize]);
 
   const [overlay, setOverlay] = React.useState<
     "none" | "assistant" | "compare" | "ar" | "trace"
   >("none");
   /** Below md the panels are bottom sheets that the 3D view must sit above. */
-  const sheetOpen = leftOpen || (rightOpen && Boolean(selectedId));
+  const sheetOpen = !viewing && (leftOpen || (rightOpen && Boolean(selectedId)));
   const [saving, setSaving] = React.useState(false);
   const [justSaved, setJustSaved] = React.useState(false);
   const [confirmClear, setConfirmClear] = React.useState(false);
@@ -157,7 +173,13 @@ export function StudioShell() {
   }, [project?.name]);
 
   return (
-    <div className="flex h-dvh flex-col overflow-hidden bg-ink-0">
+    // The studio is a tool surface, not a document: no text selection and no
+    // long-press callout, or holding and dragging an item highlights the whole
+    // page on a phone. Text fields opt back in.
+    <div
+      className="flex h-dvh select-none flex-col overflow-hidden bg-ink-0 [-webkit-touch-callout:none] [&_input]:select-text [&_textarea]:select-text"
+      style={{ ["--sheet" as string]: `${Math.round(sheetFraction * 1000) / 10}%` }}
+    >
       {/* ---------------- Top bar ---------------- */}
       <header className="z-40 flex h-[56px] shrink-0 items-center gap-3 border-b border-white/8 bg-ink-1/80 px-3 backdrop-blur-xl">
         <Link
@@ -257,11 +279,16 @@ export function StudioShell() {
         {leftOpen && (
           <div
             className={cn(
-              "absolute inset-x-0 bottom-0 z-30 h-[58%] overflow-hidden rounded-t-[22px] border-t border-white/12",
-              "md:static md:inset-auto md:z-auto md:h-full md:shrink-0 md:rounded-none md:border-t-0",
+              "absolute inset-x-0 bottom-0 z-30 flex h-[var(--sheet)] flex-col overflow-hidden rounded-t-[22px] border-t border-white/12 bg-ink-1",
+              viewing && "max-md:hidden",
+              dragHeight === null && "transition-[height] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
+              "md:static md:inset-auto md:z-auto md:h-full md:shrink-0 md:rounded-none md:border-t-0 md:bg-transparent",
             )}
           >
-            <LeftPanel onTrace={() => setOverlay("trace")} />
+            <SheetHandle size={sheetSize} onSize={setSheetSize} onDrag={setDragHeight} />
+            <div className="min-h-0 flex-1">
+              <LeftPanel onTrace={() => setOverlay("trace")} />
+            </div>
           </div>
         )}
 
@@ -283,7 +310,8 @@ export function StudioShell() {
             <div
               className={cn(
                 "absolute inset-x-0 top-0 md:bottom-0",
-                sheetOpen && overlay !== "compare" ? "bottom-[58%]" : "bottom-0",
+                sheetOpen && overlay !== "compare" ? "bottom-[var(--sheet)]" : "bottom-0",
+                dragHeight === null && "transition-[bottom] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
               )}
             >
               <Viewport className="size-full" />
@@ -292,7 +320,14 @@ export function StudioShell() {
 
           {/* Floating chrome. The wrapper is pointer-events-none so the 3D
               scene keeps every event not aimed at an actual control. */}
-          <div className="pointer-events-none absolute inset-0">
+          {/* On phones the chrome ends where the sheet begins, so the toolbar
+              sits above the list instead of on top of it. */}
+          <div
+            className={cn(
+              "pointer-events-none absolute inset-x-0 top-0 md:bottom-0",
+              sheetOpen && overlay !== "compare" ? "bottom-[var(--sheet)]" : "bottom-0",
+            )}
+          >
             {!leftOpen && overlay !== "compare" && (
               <button
                 onClick={() => setLeftOpen(true)}
@@ -330,12 +365,16 @@ export function StudioShell() {
         {rightOpen && (
           <div
             className={cn(
-              "absolute inset-x-0 bottom-0 z-30 h-[58%] overflow-hidden rounded-t-[22px] border-t border-white/12",
-              selectedId ? "" : "hidden",
-              "md:static md:inset-auto md:z-auto md:block md:h-full md:shrink-0 md:rounded-none md:border-t-0",
+              "absolute inset-x-0 bottom-0 z-30 flex h-[var(--sheet)] flex-col overflow-hidden rounded-t-[22px] border-t border-white/12 bg-ink-1",
+              selectedId && !viewing ? "" : "hidden",
+              dragHeight === null && "transition-[height] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
+              "md:static md:inset-auto md:z-auto md:block md:h-full md:shrink-0 md:rounded-none md:border-t-0 md:bg-transparent",
             )}
           >
-            <RightPanel />
+            <SheetHandle size={sheetSize} onSize={setSheetSize} onDrag={setDragHeight} />
+            <div className="min-h-0 flex-1">
+              <RightPanel />
+            </div>
           </div>
         )}
 
@@ -344,6 +383,71 @@ export function StudioShell() {
 
       {overlay === "ar" && <ArMode onClose={() => setOverlay("none")} />}
       {overlay === "trace" && <FurnitureTracer onClose={() => setOverlay("none")} />}
+    </div>
+  );
+}
+
+/**
+ * The grab bar on a phone's bottom sheet. Drag to resize — it follows the
+ * finger, then snaps to the nearest of peek / half / full — or tap to toggle
+ * between peeking at the room and browsing.
+ */
+function SheetHandle({
+  size,
+  onSize,
+  onDrag,
+}: {
+  size: SheetSize;
+  onSize: (s: SheetSize) => void;
+  onDrag: (fraction: number | null) => void;
+}) {
+  const start = React.useRef<{ y: number; frac: number; moved: boolean } | null>(null);
+
+  const finish = (fraction: number | null) => {
+    onDrag(null);
+    if (fraction === null) return;
+    const nearest = (Object.keys(SHEET_HEIGHT) as SheetSize[]).reduce((best, k) =>
+      Math.abs(SHEET_HEIGHT[k] - fraction) < Math.abs(SHEET_HEIGHT[best] - fraction) ? k : best,
+    );
+    onSize(nearest);
+  };
+
+  return (
+    <div
+      role="separator"
+      aria-label="Resize panel"
+      aria-orientation="horizontal"
+      className="flex h-6 shrink-0 cursor-row-resize touch-none items-center justify-center md:hidden"
+      onPointerDown={(e) => {
+        (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+        start.current = { y: e.clientY, frac: SHEET_HEIGHT[size], moved: false };
+      }}
+      onPointerMove={(e) => {
+        const s = start.current;
+        if (!s) return;
+        const dy = e.clientY - s.y;
+        if (Math.abs(dy) > 4) s.moved = true;
+        if (!s.moved) return;
+        const frac = Math.min(0.92, Math.max(0.2, s.frac - dy / window.innerHeight));
+        onDrag(frac);
+      }}
+      onPointerUp={(e) => {
+        const s = start.current;
+        start.current = null;
+        if (!s) return;
+        if (!s.moved) {
+          onDrag(null);
+          onSize(size === "peek" ? "half" : "peek");
+          return;
+        }
+        finish(Math.min(0.92, Math.max(0.2, s.frac - (e.clientY - s.y) / window.innerHeight)));
+      }}
+      onPointerCancel={() => {
+        start.current = null;
+        onDrag(null);
+      }}
+    >
+      <span className="h-1.5 w-11 rounded-full bg-white/25" />
     </div>
   );
 }

@@ -10,7 +10,7 @@
 import { productById } from "@/lib/catalog/source";
 import type { AestheticId, Product } from "@/lib/catalog/types";
 import { resolvePlacement } from "@/lib/placement/resolve";
-import { stackSurface } from "@/lib/placement/transform";
+import { isFloorCovering, stackSurface } from "@/lib/placement/transform";
 import type { PlacedItem } from "@/lib/placement/types";
 import type { RoomGeometry, SurfaceId, Vec3 } from "@/lib/room/types";
 import { parseIntent, recommend } from "./scoring";
@@ -143,9 +143,16 @@ function candidatePoints(
         [-w * 0.38, 0, d * 0.1],
         [w * 0.38, 0, d * 0.1],
       ];
+      // A rug belongs in the open middle of the room, under things.
+      if (isFloorCovering(product)) spots.unshift([0, 0, 0], [0, 0, d * 0.15]);
+      // A full room still has gaps; try a grid over the floor before giving up.
+      const grid: Vec3[] = [];
+      for (let gz = -0.4; gz <= 0.41; gz += 0.2) {
+        for (let gx = -0.4; gx <= 0.41; gx += 0.2) grid.push([w * gx, 0, d * gz]);
+      }
       return spots
         .slice(index % spots.length)
-        .concat(spots)
+        .concat(spots, grid)
         .map((p) => ({ point: p, normal: [0, 1, 0] as Vec3, surfaceId: "floor" as SurfaceId }));
     }
 

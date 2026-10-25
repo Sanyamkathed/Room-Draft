@@ -40,6 +40,7 @@ import { ProductThumb } from "./ProductThumb";
  */
 export function LeftPanel({ onTrace }: { onTrace?: () => void }) {
   const setOpen = useStudio((s) => s.setLeftPanel);
+  const setSheetSize = useStudio((s) => s.setSheetSize);
   const beginDraft = useStudio((s) => s.beginDraft);
   const room = useStudio((s) => s.room);
   const items = useStudio((s) => s.items);
@@ -235,90 +236,31 @@ export function LeftPanel({ onTrace }: { onTrace?: () => void }) {
               : `Nothing matches “${query}”.`}
           </p>
         ) : (
-          <ul className="space-y-1">
+          <ul className="grid grid-cols-2 gap-2 md:grid-cols-1 md:gap-1">
             {list.map((p) => (
               <li key={p.id}>
-                <div
-                  role="button"
-                  tabIndex={0}
-                  onPointerEnter={(e) => startHover(p, e.currentTarget, e.pointerType)}
-                  onPointerLeave={clearHover}
-                  onPointerDown={(e) => {
-                    // Left button / touch only, and don't steal text selection
-                    // from the search field.
-                    if (e.button !== 0) return;
-                    e.preventDefault();
+                <LibraryCard
+                  product={p}
+                  onMouseDrag={() => {
                     clearHover();
                     beginDraft(p.id);
                   }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      quickAdd(p);
-                    }
+                  onTouchDrag={() => beginDraft(p.id)}
+                  onPlace={() => {
+                    quickAdd(p);
+                    if (window.matchMedia("(max-width: 767px)").matches) setSheetSize("peek");
                   }}
-                  className={cn(
-                    "group flex w-full cursor-grab items-center gap-3 rounded-[13px] p-2 text-left",
-                    "transition-colors duration-200 hover:bg-white/6 active:cursor-grabbing",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
-                  )}
-                >
-                  <ProductThumb
-                    product={p}
-                    className="size-14 shrink-0 transition-transform duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-110"
-                  />
-
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-[12.5px] font-medium leading-tight text-chalk">
-                      {p.name}
-                    </p>
-                    <p className="mt-0.5 truncate text-[11px] text-chalk-4">{p.brand}</p>
-                    <div className="mt-1 flex items-center gap-2">
-                      {p.isFurniture || (p.custom && !p.price) ? (
-                        <span className="text-[11.5px] font-medium text-chalk-3">
-                          {p.isFurniture ? "Already yours" : "Your item"}
-                        </span>
-                      ) : (
-                        <span className="text-[12px] font-semibold text-chalk-2">
-                          {formatINR(p.price)}
-                        </span>
-                      )}
-                      <span className="truncate text-[10.5px] tabular-nums text-chalk-4">
-                        {formatDims(p)}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex shrink-0 flex-col items-center gap-1">
-                    {p.custom ? (
-                      <button
-                        aria-label={`Edit ${p.name}`}
-                        onPointerDown={(e) => e.stopPropagation()}
-                        onClick={(e) => {
-                          e.stopPropagation();
+                  onEdit={
+                    p.custom
+                      ? () => {
                           clearHover();
                           setBuilder(p);
-                        }}
-                        className="grid size-6 place-items-center rounded-[8px] text-chalk-4 transition-colors hover:bg-white/8 hover:text-chalk"
-                      >
-                        <Pencil className="size-3" />
-                      </button>
-                    ) : (
-                      <Grip className="size-3.5 text-chalk-4 opacity-0 transition-opacity group-hover:opacity-100" />
-                    )}
-                    <button
-                      aria-label={`Add ${p.name} to room`}
-                      onPointerDown={(e) => e.stopPropagation()}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        quickAdd(p);
-                      }}
-                      className="grid size-7 place-items-center rounded-[9px] bg-white/7 text-chalk-2 transition-all hover:bg-accent hover:text-black"
-                    >
-                      <Plus className="size-3.5" strokeWidth={2.4} />
-                    </button>
-                  </div>
-                </div>
+                        }
+                      : undefined
+                  }
+                  onHoverStart={(el, type) => startHover(p, el, type)}
+                  onHoverEnd={clearHover}
+                />
               </li>
             ))}
           </ul>
@@ -332,13 +274,18 @@ export function LeftPanel({ onTrace }: { onTrace?: () => void }) {
             <span className="font-medium text-chalk">{target.product.name}</span>
           </p>
         ) : (
-          <p className="text-[11px] text-chalk-4">
-            Drag onto your room, or press{" "}
-            <span className="inline-grid size-4 place-items-center rounded bg-white/10 text-[9px] font-bold text-chalk-2">
-              +
-            </span>{" "}
-            to place it for you
-          </p>
+          <>
+            <p className="text-[11px] text-chalk-4 md:hidden">
+              Tap to place it · hold to drag it into the room
+            </p>
+            <p className="hidden text-[11px] text-chalk-4 md:block">
+              Drag onto your room, or press{" "}
+              <span className="inline-grid size-4 place-items-center rounded bg-white/10 text-[9px] font-bold text-chalk-2">
+                +
+              </span>{" "}
+              to place it for you
+            </p>
+          </>
         )}
       </footer>
 
@@ -359,5 +306,179 @@ export function LeftPanel({ onTrace }: { onTrace?: () => void }) {
         anchor={hover && !draft ? { y: hover.y, x: hover.x } : null}
       />
     </aside>
+  );
+}
+
+/**
+ * One item in the library.
+ *
+ * A mouse press picks it up straight away, so it can be dragged into the
+ * room. A finger can't do that: the same touch has to scroll the list. So on
+ * touch a quick tap PLACES the item (the planner finds it a spot and the sheet
+ * drops to show the room), a long-press picks it up to drag, and any movement
+ * before then is left to the browser as a scroll.
+ */
+function LibraryCard({
+  product: p,
+  onMouseDrag,
+  onTouchDrag,
+  onPlace,
+  onEdit,
+  onHoverStart,
+  onHoverEnd,
+}: {
+  product: Product;
+  onMouseDrag: () => void;
+  onTouchDrag: () => void;
+  onPlace: () => void;
+  onEdit?: () => void;
+  onHoverStart: (el: HTMLElement, pointerType: string) => void;
+  onHoverEnd: () => void;
+}) {
+  const press = React.useRef<{
+    x: number;
+    y: number;
+    timer: ReturnType<typeof setTimeout>;
+    fired: boolean;
+  } | null>(null);
+  const cleanup = React.useRef<(() => void) | null>(null);
+  const [lifted, setLifted] = React.useState(false);
+
+  React.useEffect(() => () => cleanup.current?.(), []);
+
+  const startTouch = (e: React.PointerEvent) => {
+    const block = (ev: TouchEvent) => ev.preventDefault();
+    const end = () => {
+      const pr = press.current;
+      press.current = null;
+      cleanup.current = null;
+      setLifted(false);
+      window.removeEventListener("touchmove", block);
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", cancel);
+      if (pr) clearTimeout(pr.timer);
+      return pr;
+    };
+    const cancel = () => {
+      end();
+    };
+    const move = (ev: PointerEvent) => {
+      const pr = press.current;
+      if (!pr || pr.fired) return;
+      // Moved before the hold completed: it's a scroll, so let the browser have it.
+      if (Math.hypot(ev.clientX - pr.x, ev.clientY - pr.y) > 10) end();
+    };
+    const up = () => {
+      const pr = end();
+      if (pr && !pr.fired) onPlace();
+    };
+
+    press.current = {
+      x: e.clientX,
+      y: e.clientY,
+      fired: false,
+      timer: setTimeout(() => {
+        const pr = press.current;
+        if (!pr) return;
+        pr.fired = true;
+        setLifted(true);
+        navigator.vibrate?.(12);
+        // From here the finger is dragging the item, so the list must not
+        // scroll underneath it (that would also cancel the pointer).
+        window.addEventListener("touchmove", block, { passive: false });
+        onTouchDrag();
+      }, 380),
+    };
+    cleanup.current = end;
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", cancel);
+  };
+
+  const free = p.isFurniture || (p.custom && !p.price);
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      aria-label={`${p.name}: tap to place, hold to drag`}
+      onPointerEnter={(e) => onHoverStart(e.currentTarget, e.pointerType)}
+      onPointerLeave={onHoverEnd}
+      onPointerDown={(e) => {
+        if (e.pointerType === "mouse") {
+          // Left button only, and don't steal text selection from search.
+          if (e.button !== 0) return;
+          e.preventDefault();
+          onMouseDrag();
+          return;
+        }
+        startTouch(e);
+      }}
+      onContextMenu={(e) => e.preventDefault()}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onPlace();
+        }
+      }}
+      className={cn(
+        "group relative flex h-full cursor-grab select-none flex-col gap-2 rounded-[15px] border border-white/7 bg-white/[0.03] p-2 text-left [-webkit-touch-callout:none]",
+        "transition-[background-color,transform,border-color] duration-200 active:cursor-grabbing",
+        "md:flex-row md:items-center md:gap-3 md:border-transparent md:bg-transparent md:hover:bg-white/6",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
+        lifted && "scale-[0.97] border-accent/50 bg-accent/10",
+      )}
+    >
+      <ProductThumb
+        product={p}
+        className="aspect-square w-full shrink-0 transition-transform duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] md:size-14 md:w-auto md:group-hover:scale-110"
+      />
+
+      <div className="min-w-0 flex-1 px-0.5 md:px-0">
+        <p className="line-clamp-2 text-[12.5px] font-medium leading-snug text-chalk md:line-clamp-1">
+          {p.name}
+        </p>
+        <p className="mt-0.5 hidden truncate text-[11px] text-chalk-4 md:block">{p.brand}</p>
+        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          {free ? (
+            <span className="text-[11.5px] font-medium text-chalk-3">
+              {p.isFurniture ? "Already yours" : "Your item"}
+            </span>
+          ) : (
+            <span className="text-[12px] font-semibold text-chalk-2">{formatINR(p.price)}</span>
+          )}
+          <span className="truncate text-[10.5px] tabular-nums text-chalk-4">{formatDims(p)}</span>
+        </div>
+      </div>
+
+      {/* Phones: edit sits in the tile's top-left corner, add in the top-right. */}
+      {onEdit ? (
+        <button
+          aria-label={`Edit ${p.name}`}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onEdit();
+          }}
+          className="absolute left-3.5 top-3.5 grid size-8 place-items-center rounded-[9px] bg-ink-1/80 text-chalk-3 backdrop-blur transition-colors hover:bg-white/8 hover:text-chalk md:static md:order-last md:size-6 md:bg-transparent md:text-chalk-4"
+        >
+          <Pencil className="size-3.5 md:size-3" />
+        </button>
+      ) : (
+        <Grip className="hidden size-3.5 shrink-0 text-chalk-4 opacity-0 transition-opacity group-hover:opacity-100 md:block" />
+      )}
+      <button
+        aria-label={`Add ${p.name} to room`}
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+          onPlace();
+        }}
+        className="absolute right-3.5 top-3.5 grid size-9 place-items-center rounded-[11px] bg-accent text-black shadow-lg shadow-black/40 transition-all md:static md:size-7 md:shrink-0 md:rounded-[9px] md:bg-white/7 md:text-chalk-2 md:shadow-none md:hover:bg-accent md:hover:text-black"
+      >
+        <Plus className="size-4 md:size-3.5" strokeWidth={2.4} />
+      </button>
+    </div>
   );
 }

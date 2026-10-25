@@ -6,14 +6,19 @@ import {
   CanvasTexture,
   Color,
   EdgesGeometry,
+  Quaternion,
+  Vector3,
+  type Mesh,
+  type PerspectiveCamera,
   SRGBColorSpace,
   Texture,
   type Group,
 } from "three";
-import type { ThreeEvent } from "@react-three/fiber";
+import { useFrame, type ThreeEvent } from "@react-three/fiber";
 import type { Product } from "@/lib/catalog/types";
 import { boxCentre, itemEuler, localBox } from "@/lib/placement/transform";
 import type { PlacedItem } from "@/lib/placement/types";
+import type { Vec3 } from "@/lib/room/types";
 import { rectifyToCanvas } from "@/lib/room/rectify";
 import { contactShadowTexture } from "@/lib/three/textures";
 import { useStudio } from "@/lib/store/studio";
@@ -199,6 +204,52 @@ function ContactShadow({
   );
 }
 
+/**
+ * An invisible, finger-sized grab area along a strip or string light.
+ *
+ * The wire itself is about a centimetre across — a few pixels on a phone —
+ * so tapping it to select it was mostly luck. This box is ~7cm thick, draws
+ * nothing (no colour, no depth), and is flagged `pickOnly` so dragging other
+ * items ignores it rather than treating it as something to land on.
+ */
+function PickTube({ path }: { path: [Vec3, Vec3] }) {
+  const mesh = React.useRef<Mesh>(null);
+  const { mid, length, quat } = React.useMemo(() => {
+    const a = new Vector3(...path[0]);
+    const b = new Vector3(...path[1]);
+    const dir = b.clone().sub(a);
+    const len = dir.length();
+    return {
+      mid: a.clone().add(b).multiplyScalar(0.5),
+      length: len,
+      quat: new Quaternion().setFromUnitVectors(new Vector3(1, 0, 0), dir.normalize()),
+    };
+  }, [path]);
+
+  // Sized in SCREEN space: ~32px thick however far the camera is, because a
+  // fixed size in metres is a few pixels once the whole room fits on a phone.
+  const tmp = React.useMemo(() => new Vector3(), []);
+  useFrame(({ camera, size }) => {
+    const m = mesh.current;
+    if (!m) return;
+    const cam = camera as PerspectiveCamera;
+    m.getWorldPosition(tmp);
+    // Nearest point on the run matters more than its middle, but the middle
+    // is close enough for a grab area and costs nothing.
+    const dist = tmp.distanceTo(cam.position);
+    const worldPerPx = (2 * dist * Math.tan(((cam.fov ?? 48) * Math.PI) / 360)) / Math.max(1, size.height);
+    const thick = Math.max(0.05, worldPerPx * 32);
+    m.scale.set(1, thick, thick);
+  });
+
+  return (
+    <mesh ref={mesh} position={mid} quaternion={quat} userData={{ pickOnly: true }}>
+      <boxGeometry args={[length, 1, 1]} />
+      <meshBasicMaterial transparent opacity={0} depthWrite={false} colorWrite={false} />
+    </mesh>
+  );
+}
+
 export interface PlacedObjectProps {
   item: PlacedItem;
   product: Product;
@@ -325,6 +376,7 @@ export function PlacedObject({
             light={light && !ghost}
             lightScale={lightScale}
           />
+          {!ghost && item.path ? <PickTube path={item.path} /> : null}
         </group>
       </group>
     );

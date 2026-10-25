@@ -22,6 +22,10 @@ import { PlacedObject } from "./PlacedObject";
 import { ProjectionPools } from "./ProjectionPool";
 import { RoomShell } from "./RoomShell";
 
+/** A phone or tablet: a touch-first device with a small, dense screen. */
+const IS_TOUCH =
+  typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
+
 /** Ceiling on simultaneous real lights — beyond this the cost is not worth it. */
 const MAX_DYNAMIC_LIGHTS = 8;
 
@@ -107,8 +111,8 @@ export function Lighting({
         position={[width * 0.7, height * 1.7, depth * 0.55]}
         intensity={1.35 * k}
         castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
+        shadow-mapSize-width={IS_TOUCH ? 1024 : 2048}
+        shadow-mapSize-height={IS_TOUCH ? 1024 : 2048}
         shadow-bias={-0.0009}
         shadow-normalBias={0.02}
         shadow-camera-near={0.2}
@@ -329,16 +333,39 @@ function OrbitRig({ room, mode }: { room: RoomGeometry; mode: CameraMode }) {
       rotateSpeed={mode === "first" ? -0.34 : 0.62}
       zoomSpeed={0.7}
       panSpeed={0.7}
-      minDistance={mode === "first" ? 0.08 : 0.6}
-      maxDistance={Math.max(room.dimensions.width, room.dimensions.depth) * 3.2}
+      // Close enough to read a figure on a shelf, far enough to see the whole room.
+      minDistance={mode === "first" ? 0.08 : 0.12}
+      maxDistance={Math.max(room.dimensions.width, room.dimensions.depth) * 5}
+      // Pinch and scroll zoom towards what is under the fingers, not the room centre.
+      zoomToCursor={mode !== "first"}
       minPolarAngle={mode === "top" ? 0 : 0.12}
       maxPolarAngle={mode === "top" ? 0.35 : Math.PI * 0.92}
       makeDefault
+      regress
       // Touch: one finger orbits, two fingers pan and pinch — the pinch-to-zoom
       // and two-finger gestures the brief asks for on mobile.
       touches={{ ONE: 0, TWO: 2 }}
     />
   );
+}
+
+/**
+ * Keep the canvas's own touch handling switched off.
+ *
+ * OrbitControls sets `touch-action: none` when it connects — and `auto` when
+ * it disconnects. Changing camera mode, or opening a sheet that resizes the
+ * view, swaps the controls, and the old instance tearing down last leaves
+ * the canvas on `auto`: the phone then treats a pinch as zooming the whole
+ * page and a drag as scrolling it, so the room can't be zoomed or turned.
+ * Re-asserting it every frame costs one string comparison.
+ */
+function TouchLock() {
+  const gl = useThree((s) => s.gl);
+  useFrame(() => {
+    const style = gl.domElement.style;
+    if (style.touchAction !== "none") style.touchAction = "none";
+  });
+  return null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -441,10 +468,15 @@ function Scene() {
             light={lightBudget.has(item.id)}
             lightScale={photoTexture ? 0.45 : 1}
             onPointerDown={(e, it) => {
+              // Pressing on the item that is ALREADY selected picks it up, in
+              // any tool: tap to select, then drag to move — the gesture a
+              // phone user tries first. A press on anything else only selects,
+              // so the camera stays draggable everywhere else.
+              // View mode is for looking: the press only steers the camera.
+              if (tool === "view") return;
+              const wasSelected = useStudio.getState().selectedId === it.id;
               select(it.id);
-              // A press on an object in move mode picks it straight up; in
-              // select mode it just selects, so the camera stays draggable.
-              if (tool === "move") {
+              if (tool === "move" || wasSelected) {
                 (e.target as Element | null)?.releasePointerCapture?.(e.pointerId);
                 beginDraft(it.productId, it.id);
               }
@@ -474,6 +506,7 @@ function Scene() {
       />
 
       <Guides />
+      <TouchLock />
     </>
   );
 }
@@ -518,7 +551,13 @@ export function Viewport({ className }: { className?: string }) {
     <Canvas
       className={className}
       shadows
-      dpr={[1, 2]}
+      // Phones have 3x screens; rendering 3D at full density is most of what
+      // makes the room stutter there, and past ~1.5x the difference is hard
+      // to see on a 6-inch display.
+      dpr={[1, IS_TOUCH ? 1.5 : 2]}
+      // Lets AdaptiveDpr drop resolution while the camera is moving (see
+      // `regress` on the controls) and restore it the moment it stops.
+      performance={{ min: 0.5 }}
       gl={{
         antialias: false, // SMAA in the composer handles this more cheaply
         alpha: false,

@@ -3,6 +3,7 @@
 import * as React from "react";
 import type { ModelKind, Product } from "@/lib/catalog/types";
 import { cn } from "@/lib/utils/cn";
+import { useProductRender } from "./thumbCache";
 
 /**
  * Catalog thumbnails.
@@ -289,6 +290,8 @@ export function ProductThumb({
   const glyph = GLYPH_FOR[product.model] ?? "flat";
   const [a, b = a] = product.palette;
   const glow = product.emissive?.color;
+  // The real 3D render once it exists; the drawn glyph holds the space until then.
+  const render = useProductRender(product);
 
   return (
     <div
@@ -308,7 +311,15 @@ export function ProductThumb({
           style={{ background: glow, opacity: 0.4 }}
         />
       )}
-      {product.custom?.image ? (
+      {render ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={render}
+          alt=""
+          draggable={false}
+          className="relative size-full object-contain p-[6%] animate-fade"
+        />
+      ) : product.custom?.image ? (
         // The user's own cutout is the best possible thumbnail for their item.
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -329,3 +340,4 @@ export function ProductThumb({
     </div>
   );
 }
+

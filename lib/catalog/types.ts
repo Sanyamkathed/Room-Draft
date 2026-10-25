@@ -160,13 +160,19 @@ export type CustomStyle =
   /** A thick cutout that turns to face the viewer, so it never shows its edge. */
   | "facing"
   /** A rounded solid puffed out of the photo's silhouette — reads as 3D from any side. */
-  | "sculpted";
+  | "sculpted"
+  /** Lies flat on the floor, like a rug or mat — things can stand on it. */
+  | "rug";
 
 export type CustomShape = "box" | "cylinder" | "sphere";
 
 export interface CustomSpec {
   /** Background-removed PNG data URL. Absent for plain shapes. */
   image?: string;
+  /** A mirror's glass, as a mask PNG aligned with `image`; drawn reflective. */
+  glass?: string;
+  /** Other things can be set down on top of it (a side table, a rug). */
+  holds?: boolean;
   style: CustomStyle;
   /** Used when there is no image. */
   shape?: CustomShape;

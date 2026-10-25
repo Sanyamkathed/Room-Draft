@@ -32,14 +32,26 @@ import { PreviewStage } from "./HoverPreview";
 type Source = "link" | "upload" | "shape";
 type Dims = { w: number; h: number; d: number };
 
-const MOUNTS: { value: MountType; label: string }[] = [
+/** Where it goes, as the user thinks of it. A rug is a floor item that lies flat. */
+type Kind = MountType | "rug";
+
+const KINDS: { value: Kind; label: string }[] = [
   { value: "wall", label: "Wall" },
   { value: "tabletop", label: "Table / shelf" },
   { value: "floor", label: "Floor" },
+  { value: "rug", label: "Rug / mat" },
   { value: "ceiling", label: "Ceiling" },
 ];
 
-const PRESETS: Record<MountType, { label: string; dims: Dims }[]> = {
+const PRESETS: Record<Kind, { label: string; dims: Dims }[]> = {
+  rug: [
+    { label: "Bath mat", dims: { w: 40, h: 1, d: 60 } },
+    { label: "Small rug", dims: { w: 90, h: 1, d: 150 } },
+    { label: "Rug", dims: { w: 160, h: 1.2, d: 230 } },
+    { label: "Large rug", dims: { w: 200, h: 1.2, d: 300 } },
+    { label: "Runner", dims: { w: 70, h: 1, d: 200 } },
+    { label: "Round", dims: { w: 120, h: 1, d: 120 } },
+  ],
   wall: [
     { label: "A4 print", dims: { w: 21, h: 29.7, d: 0.3 } },
     { label: "A3 poster", dims: { w: 29.7, h: 42, d: 0.3 } },
@@ -113,13 +125,28 @@ export function CustomItemDialog({
     initial && spec0?.image ? initial.dims.w / Math.max(1, initial.dims.h) : null,
   );
   const [removeBg, setRemoveBg] = React.useState(true);
+  // Keep just the photo's subject when the cutout finds several objects.
+  const [mainOnly, setMainOnly] = React.useState(true);
+  const [others, setOthers] = React.useState(0);
   const [busy, setBusy] = React.useState<null | "import" | "cutout">(null);
   const [error, setError] = React.useState<string | null>(null);
   const [warning, setWarning] = React.useState<string | null>(null);
 
   const [name, setName] = React.useState(initial?.name ?? "");
-  const [mount, setMount] = React.useState<MountType>(initial?.mount ?? "wall");
+  const [kind, setKind] = React.useState<Kind>(
+    spec0?.style === "rug" ? "rug" : (initial?.mount ?? "wall"),
+  );
+  const mount: MountType = kind === "rug" ? "floor" : kind;
+  const isRug = kind === "rug";
+  // A rug's photo is seen from above, so its proportions are width × depth.
+  const isRugRef = React.useRef(isRug);
+  isRugRef.current = isRug;
   const [dims, setDims] = React.useState<Dims>(initial?.dims ?? PRESETS.wall[1].dims);
+  // A mirror's glass reflects; found from the frame that encloses it.
+  const [isMirror, setIsMirror] = React.useState(Boolean(spec0?.glass));
+  const [glass, setGlass] = React.useState<string | undefined>(spec0?.glass);
+  // Other things can be set down on it — a side table, a stool, a rug.
+  const [holds, setHolds] = React.useState<boolean>(initial?.stackable ?? false);
   const [keepRatio, setKeepRatio] = React.useState(true);
   const [style, setStyle] = React.useState<CustomStyle>(spec0?.style ?? "flat");
   const [shape, setShape] = React.useState<CustomShape>(spec0?.shape ?? "box");
@@ -138,10 +165,12 @@ export function CustomItemDialog({
     let live = true;
     setBusy("cutout");
     setWarning(null);
-    prepareCutout(rawImage, removeBg)
+    prepareCutout(rawImage, removeBg, mainOnly, isMirror)
       .then((c) => {
         if (!live) return;
+        setOthers(c.others);
         setImage(c.dataUrl);
+        setGlass(c.glass);
         setAspect(c.aspect);
         setVersion(Date.now());
         if (removeBg && c.uncertain) {
@@ -150,7 +179,9 @@ export function CustomItemDialog({
           setWarning("Hardly any background was found to remove — that's fine if the picture is already a cutout.");
         }
         // Keep the object's real proportions as the starting size.
-        setDims((d) => (keepRatio ? { ...d, w: round(d.h * c.aspect) } : d));
+        setDims((d) =>
+          !keepRatio ? d : isRugRef.current ? { ...d, d: round(d.w / c.aspect) } : { ...d, w: round(d.h * c.aspect) },
+        );
       })
       .catch(() => live && setError("Couldn't process that image."))
       .finally(() => live && setBusy(null));
@@ -158,26 +189,31 @@ export function CustomItemDialog({
       live = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rawImage, removeBg]);
+  }, [rawImage, removeBg, mainOnly, isMirror]);
 
-  // Sensible defaults when the mount changes: a style that suits it, and a size.
-  const pickMount = (m: MountType) => {
-    setMount(m);
-    setStyle(m === "wall" ? "flat" : "sculpted");
-    const p = PRESETS[m][m === "wall" ? 1 : 0]?.dims;
-    if (p) applyDims(p);
+  // Sensible defaults when the kind changes: a style that suits it, and a size.
+  const pickKind = (k: Kind) => {
+    setKind(k);
+    isRugRef.current = k === "rug";
+    setStyle(k === "rug" ? "rug" : k === "wall" ? "flat" : "sculpted");
+    setHolds(k === "rug" || k === "floor");
+    const p = PRESETS[k][k === "wall" || k === "rug" ? 1 : 0]?.dims;
+    if (p) applyDims(p, k === "rug");
   };
 
-  const applyDims = (p: Dims) => {
-    setDims(hasImage && keepRatio && aspect ? { ...p, w: round(p.h * aspect) } : p);
+  const applyDims = (p: Dims, rug = isRug) => {
+    if (!(hasImage && keepRatio && aspect)) return setDims(p);
+    setDims(rug ? { ...p, d: round(p.w / aspect) } : { ...p, w: round(p.h * aspect) });
   };
 
+  // The photo's proportions tie width to height — or, for a rug, to depth.
   const setDim = (key: keyof Dims, value: number) => {
     setDims((d) => {
       const next = { ...d, [key]: value };
       if (hasImage && keepRatio && aspect) {
-        if (key === "w") next.h = round(value / aspect);
-        if (key === "h") next.w = round(value * aspect);
+        const other = isRug ? "d" : "h";
+        if (key === "w") next[other] = round(value / aspect);
+        if (key === other) next.w = round(value * aspect);
       }
       return next;
     });
@@ -216,6 +252,7 @@ export function CustomItemDialog({
       if (!/^data:image\/(jpeg|png|webp|gif);base64,/.test(data.image)) throw new Error("That link didn't give a usable image.");
       setRawImage(data.image);
       if (!name && data.title) setName(cleanTitle(data.title));
+      if (/\bmirror/i.test(data.title ?? "")) setIsMirror(true);
       setSite(data.site);
       setSourceUrl(data.sourceUrl);
     } catch (e) {
@@ -233,6 +270,7 @@ export function CustomItemDialog({
       setSite(undefined);
       setSourceUrl(undefined);
       if (!name) setName(file.name.replace(/\.[a-z0-9]+$/i, "").replace(/[-_]+/g, " ").slice(0, 60));
+      if (/mirror/i.test(file.name)) setIsMirror(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't read that file.");
     }
@@ -254,7 +292,9 @@ export function CustomItemDialog({
         glow,
         spec: {
           image: source === "shape" ? undefined : image,
-          style: source === "shape" ? "flat" : style,
+          glass: source !== "shape" && isMirror && !isRug ? glass : undefined,
+          holds: mount === "wall" || mount === "ceiling" ? undefined : isRug || holds,
+          style: isRug ? "rug" : source === "shape" ? "flat" : style,
           shape: source === "shape" ? shape : undefined,
           finish: source === "shape" ? finish : undefined,
           sourceUrl: source === "shape" ? undefined : sourceUrl,
@@ -262,7 +302,7 @@ export function CustomItemDialog({
           createdAt: spec0?.createdAt,
         },
       }),
-    [initial?.id, name, mount, dims, colour, glow, source, image, style, shape, finish, sourceUrl, site, spec0?.createdAt],
+    [initial?.id, name, mount, isRug, holds, isMirror, glass, dims, colour, glow, source, image, style, shape, finish, sourceUrl, site, spec0?.createdAt],
   );
   // The preview's texture cache is keyed on updatedAt; bump it per new image.
   const previewProduct = React.useMemo(
@@ -304,7 +344,7 @@ export function CustomItemDialog({
           </button>
         </header>
 
-        <div className="grid min-h-0 flex-1 overflow-y-auto md:grid-cols-[1fr_1.15fr]">
+        <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] overflow-x-hidden overflow-y-auto md:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
           {/* ---------------- Preview ---------------- */}
           <div className="border-b border-white/8 p-4 md:border-b-0 md:border-r">
             <div className="relative h-[240px] overflow-hidden rounded-[16px] bg-[radial-gradient(ellipse_at_50%_40%,#2a2a30_0%,#141417_70%)] md:h-[340px]">
@@ -319,7 +359,7 @@ export function CustomItemDialog({
                 <div className="absolute inset-0 grid place-items-center bg-ink-1/60">
                   <div className="flex items-center gap-2 text-[12.5px] text-chalk-2">
                     <Spinner className="size-4" />
-                    {busy === "import" ? "Fetching that link…" : "Cutting it out…"}
+                    {busy === "import" ? "Fetching that link…" : "Finding the product…"}
                   </div>
                 </div>
               ) : null}
@@ -391,8 +431,45 @@ export function CustomItemDialog({
             {source !== "shape" && rawImage ? (
               <label className="flex items-center gap-2 text-[12.5px] text-chalk-2">
                 <input type="checkbox" checked={removeBg} onChange={(e) => setRemoveBg(e.target.checked)} className="accent-[var(--color-accent)]" />
-                Remove the background
+                Show only the product
               </label>
+            ) : null}
+            {source !== "shape" && rawImage && removeBg && others > 0 ? (
+              <label className="-mt-2 flex flex-wrap items-center gap-x-2 text-[12.5px] text-chalk-2">
+                <input type="checkbox" checked={mainOnly} onChange={(e) => setMainOnly(e.target.checked)} className="accent-[var(--color-accent)]" />
+                Main item only
+                <span className="basis-full pl-6 text-[11px] text-chalk-4 sm:basis-auto sm:pl-0">
+                  {mainOnly
+                    ? `· left out ${others} other ${others === 1 ? "thing" : "things"} in the photo`
+                    : "· keeping everything in the photo"}
+                </span>
+              </label>
+            ) : null}
+            {source !== "shape" && (rawImage || image) && removeBg && !isRug ? (
+              <label className="-mt-2 flex flex-wrap items-center gap-x-2 text-[12.5px] text-chalk-2">
+                <input
+                  type="checkbox"
+                  checked={isMirror}
+                  disabled={!rawImage}
+                  onChange={(e) => setIsMirror(e.target.checked)}
+                  className="accent-[var(--color-accent)]"
+                />
+                It&apos;s a mirror
+                <span className="basis-full pl-6 text-[11px] text-chalk-4 sm:basis-auto sm:pl-0">
+                  {isMirror
+                    ? glass
+                      ? "· the glass will reflect your room"
+                      : busy
+                        ? "· finding the glass…"
+                        : "· couldn't find the glass inside the frame"
+                    : "· make the glass reflective"}
+                </span>
+              </label>
+            ) : null}
+            {source !== "shape" && rawImage && !removeBg ? (
+              <p className="-mt-3 text-[11px] leading-relaxed text-chalk-4">
+                The whole picture will show, like a poster.
+              </p>
             ) : null}
 
             {error ? <Notice tone="error">{error}</Notice> : null}
@@ -404,17 +481,32 @@ export function CustomItemDialog({
 
             <Field label="Where it goes">
               <div className="flex flex-wrap gap-1.5">
-                {MOUNTS.map((m) => (
-                  <Pill key={m.value} active={mount === m.value} onClick={() => pickMount(m.value)}>
+                {KINDS.map((m) => (
+                  <Pill key={m.value} active={kind === m.value} onClick={() => pickKind(m.value)}>
                     {m.label}
                   </Pill>
                 ))}
               </div>
+              {mount === "floor" || mount === "tabletop" ? (
+                <label className="mt-2 flex flex-wrap items-center gap-x-2 text-[12px] text-chalk-3">
+                  <input
+                    type="checkbox"
+                    checked={isRug || holds}
+                    disabled={isRug}
+                    onChange={(e) => setHolds(e.target.checked)}
+                    className="accent-[var(--color-accent)]"
+                  />
+                  Things can be placed on it
+                  <span className="basis-full pl-6 text-[11px] text-chalk-4 sm:basis-auto sm:pl-0">
+                    {isRug ? "· furniture and decor stand on a rug" : "· like a side table, stool or tray"}
+                  </span>
+                </label>
+              ) : null}
             </Field>
 
             <Field label="Real size (cm)" hint="A picture can't tell us how big something is — this is what makes it true-to-size in your room.">
               <div className="mb-2 flex flex-wrap gap-1.5">
-                {PRESETS[mount].map((p) => (
+                {PRESETS[kind].map((p) => (
                   <Pill key={p.label} onClick={() => applyDims(p.dims)}>
                     {p.label}
                   </Pill>
@@ -424,7 +516,7 @@ export function CustomItemDialog({
                 {(["w", "h", "d"] as const).map((k) => (
                   <label key={k} className="block">
                     <span className="mb-1 block text-[10.5px] font-medium uppercase tracking-[0.08em] text-chalk-4">
-                      {k === "w" ? "Width" : k === "h" ? "Height" : "Depth"}
+                      {k === "w" ? "Width" : k === "h" ? (isRug ? "Thickness" : "Height") : isRug ? "Length" : "Depth"}
                     </span>
                     <input
                       type="number"
@@ -469,7 +561,7 @@ export function CustomItemDialog({
                   </div>
                 </Field>
               </>
-            ) : (
+            ) : isRug ? null : (
               <Field label="How it looks in 3D">
                 <div className="grid gap-1.5">
                   {styles.map((s) => (

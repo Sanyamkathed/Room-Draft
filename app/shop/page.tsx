@@ -153,7 +153,7 @@ function ShopContent() {
             return (
               <article
                 key={p.id}
-                className="group flex flex-col rounded-[var(--radius-card)] border border-white/8 bg-ink-1 p-3 transition-all duration-300 hover:border-white/18"
+                className="group flex min-w-0 flex-col rounded-[var(--radius-card)] border border-white/8 bg-ink-1 p-2.5 transition-all duration-300 hover:border-white/18 md:p-3"
               >
                 <button
                   onClick={() => setDetail(p)}
@@ -173,14 +173,14 @@ function ShopContent() {
                 </div>
 
                 <div className="mt-2.5 flex items-end justify-between gap-2">
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-[14px] font-semibold">{formatINR(p.price)}</p>
                     {p.mrp && (
                       <p className="text-[11px] text-chalk-4 line-through">
                         {formatINR(p.mrp)}
                       </p>
                     )}
-                    <p className="mt-0.5 text-[10.5px] tabular-nums text-chalk-4">
+                    <p className="mt-0.5 truncate text-[10.5px] tabular-nums text-chalk-4">
                       {formatDims(p)}
                     </p>
                   </div>

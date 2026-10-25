@@ -188,25 +188,173 @@ export function boxCentre(b: Aabb): Vec3 {
   ];
 }
 
+/** A face things can stand on, in world space. */
+export interface TopFace {
+  y: number;
+  min: [number, number];
+  max: [number, number];
+  /** Headroom above an inside shelf (a cubby, a bookcase bay). Absent on tops. */
+  clear?: number;
+}
+
+/** A shelf inside an object, in the model's own frame (metres, after scale). */
+interface LocalLevel {
+  y: number;
+  x: [number, number];
+  z: [number, number];
+  clear?: number;
+}
+
 /**
- * The top face of an item, if things can be stacked on it.
+ * The shelves INSIDE objects that have them — the hexagon cells, the bays of
+ * a bookcase, the open middle of a TV unit — plus each one's real top.
  *
- * Returns the plane height plus the usable footprint, inset slightly so an
+ * The bounding box only knows one top: for a honeycomb shelf that is the top
+ * of the highest cell, so a vase set on the lower cell floated in mid-air and
+ * nothing could go inside a cell at all. These match the models' geometry in
+ * ProductModel/FurnitureModel; null means "the box top is the only surface".
+ */
+function localLevels(product: Product, w: number, h: number, d: number): LocalLevel[] | null {
+  switch (product.model) {
+    case "hexShelf": {
+      const R = Math.min(w / 3.5, h / (4 * 0.866));
+      const a = R * 0.866;
+      const t = Math.max(0.008, R * 0.12);
+      const cells: [number, number][] = [
+        [-0.75 * R, 0],
+        [0.75 * R, a],
+        [0.75 * R, -a],
+      ];
+      const inner = R / 2 - t * 0.6;
+      const out: LocalLevel[] = cells.map(([cx, cy]) => ({
+        y: cy - a + t,
+        x: [cx - inner, cx + inner],
+        z: [0.004, d],
+        clear: 2 * (a - t),
+      }));
+      // The two cells with nothing above them can carry things on top too.
+      for (const [cx, cy] of cells.slice(0, 2)) {
+        out.push({ y: cy + a, x: [cx - R / 2, cx + R / 2], z: [0, d] });
+      }
+      return out;
+    }
+    case "miniBookshelf": {
+      const t = 0.012;
+      // Left bay is full of books; the right bay is free.
+      return [
+        { y: h, x: [-w / 2, w / 2], z: [-d / 2, d / 2] },
+        { y: t, x: [w * 0.12 + t, w / 2 - t], z: [-d / 2, d / 2], clear: h - t * 2 },
+      ];
+    }
+    case "bookshelfTall": {
+      const t = 0.022;
+      const shelves = Math.max(3, Math.round(h / 0.36));
+      const pitch = (h - t) / shelves;
+      const out: LocalLevel[] = [{ y: h, x: [-w / 2, w / 2], z: [-d / 2, d / 2] }];
+      // Books fill the left of each shelf (see BookshelfTall); the rest is free.
+      const inner = w - t * 2;
+      for (let i = 0; i < shelves; i++) {
+        out.push({
+          y: i * pitch + t,
+          x: [-w / 2 + t + inner * 0.58, w / 2 - t],
+          z: [-d / 2 + 0.01, d / 2],
+          clear: pitch - t,
+        });
+      }
+      return out;
+    }
+    case "tvUnit": {
+      const t = 0.02;
+      const legH = h * 0.2;
+      const caseH = h - legH;
+      const openW = w * 0.34;
+      const x: [number, number] = [-openW / 2 + t / 2, openW / 2 - t / 2];
+      const z: [number, number] = [-d / 2 + 0.01, d / 2 - 0.02];
+      const clear = caseH / 2 - t * 1.5;
+      return [
+        { y: h, x: [-w / 2, w / 2], z: [-d / 2, d / 2] },
+        { y: legH + t, x, z, clear },
+        { y: legH + caseH / 2 + t / 2, x, z, clear },
+      ];
+    }
+    default:
+      return null;
+  }
+}
+
+/**
+ * Every face of an item things can stand on: its top, and any shelves inside.
+ *
+ * Each is the plane height plus the usable footprint, inset slightly so an
  * object placed at the very rim does not overhang into thin air.
  */
-export function stackSurface(
-  item: PlacedItem,
-  product: Product,
-): { y: number; min: [number, number]; max: [number, number] } | null {
-  if (!product.stackable) return null;
-  const b = worldBox(item, product);
-  const inset = 0.015;
-  if (b.max[0] - b.min[0] < inset * 3 || b.max[2] - b.min[2] < inset * 3) return null;
-  return {
-    y: b.max[1],
-    min: [b.min[0] + inset, b.min[2] + inset],
-    max: [b.max[0] - inset, b.max[2] - inset],
-  };
+export function stackSurfaces(item: PlacedItem, product: Product): TopFace[] {
+  if (!product.stackable) return [];
+  const [w, h, d] = itemSize(product, item.scale, item.size);
+  const levels = Math.abs(item.spin) < 1e-3 ? localLevels(product, w, h, d) : null;
+  if (!levels) {
+    const b = worldBox(item, product);
+    const inset = 0.015;
+    if (b.max[0] - b.min[0] < inset * 3 || b.max[2] - b.min[2] < inset * 3) return [];
+    return [
+      {
+        y: b.max[1],
+        min: [b.min[0] + inset, b.min[2] + inset],
+        max: [b.max[0] - inset, b.max[2] - inset],
+      },
+    ];
+  }
+
+  _q.setFromEuler(itemEuler(item, product));
+  const out: TopFace[] = [];
+  for (const l of levels) {
+    let x0 = Infinity;
+    let z0 = Infinity;
+    let x1 = -Infinity;
+    let z1 = -Infinity;
+    let y = 0;
+    for (let i = 0; i < 4; i++) {
+      _v.set(i & 1 ? l.x[1] : l.x[0], l.y, i & 2 ? l.z[1] : l.z[0]).applyQuaternion(_q);
+      x0 = Math.min(x0, _v.x);
+      x1 = Math.max(x1, _v.x);
+      z0 = Math.min(z0, _v.z);
+      z1 = Math.max(z1, _v.z);
+      y = _v.y;
+    }
+    // Inside a cell the walls already keep things in; a rim needs a margin.
+    const inset = l.clear ? 0.004 : 0.012;
+    if (x1 - x0 < inset * 3 || z1 - z0 < inset * 3) continue;
+    out.push({
+      y: y + item.position[1],
+      min: [x0 + item.position[0] + inset, z0 + item.position[2] + inset],
+      max: [x1 + item.position[0] - inset, z1 + item.position[2] - inset],
+      clear: l.clear,
+    });
+  }
+  return out;
+}
+
+/**
+ * The face of an item things can be stacked on.
+ *
+ * With no `near` point: its top. With one: the shelf that point is on or
+ * just above — aiming into a bookcase bay means that bay, not the top.
+ */
+export function stackSurface(item: PlacedItem, product: Product, near?: Vec3): TopFace | null {
+  const faces = stackSurfaces(item, product);
+  if (!faces.length) return null;
+  const top = faces.reduce((a, b) => (b.y > a.y ? b : a));
+  if (!near || faces.length === 1) return top;
+  const M = 0.04;
+  let best: TopFace | null = null;
+  for (const f of faces) {
+    if (near[0] < f.min[0] - M || near[0] > f.max[0] + M) continue;
+    if (near[2] < f.min[1] - M || near[2] > f.max[1] + M) continue;
+    if (f.y > near[1] + 0.03) continue;
+    if (f.clear !== undefined && near[1] > f.y + f.clear + 0.03) continue;
+    if (!best || f.y > best.y) best = f;
+  }
+  return best ?? top;
 }
 
 /** Classify a surface normal into the kind of place you can put something. */

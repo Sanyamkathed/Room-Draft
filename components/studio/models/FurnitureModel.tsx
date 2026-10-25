@@ -318,7 +318,8 @@ function BookshelfTall({ product, traceTexture }: FurnitureProps) {
     return Array.from({ length: shelves }).map(() => {
       const out: { x: number; bw: number; bh: number; c: string; lean: number }[] = [];
       let x = 0;
-      const limit = (w - t * 2) * (0.45 + rnd() * 0.45);
+      // The right of each shelf stays clear for the user's own things.
+      const limit = (w - t * 2) * (0.35 + rnd() * 0.2);
       while (x < limit) {
         const bw = 0.018 + rnd() * 0.02;
         out.push({ x: x + bw / 2, bw, bh: 0.16 + rnd() * 0.09, c: spines[Math.floor(rnd() * spines.length)], lean: 0 });

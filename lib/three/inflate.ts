@@ -22,6 +22,21 @@ export interface InflateOptions {
   depth: number;
   /** Wall pieces sit flat against the wall: no back bulge. */
   flatBack: boolean;
+  /**
+   * Standing things rest on a flat base. Without this the bottom of the
+   * silhouette closes to a sharp edge like every other side, so a sofa
+   * balances on a knife-edge and reads as a cushion, not furniture.
+   */
+  grounded?: boolean;
+  /** Cross-section: 2 is round (a figure, a plant); higher is boxier (furniture). */
+  squareness?: number;
+  /**
+   * Fill the gap under a bottom edge that curves up away from the floor.
+   * A sofa photographed from above has an arched bottom outline — that is
+   * perspective, not a sofa standing on one point. Gaps that start with a
+   * sudden step (between a chair's legs) stay open.
+   */
+  fillBase?: boolean;
   /** Sampling resolution along the longer side. */
   resolution?: number;
 }
@@ -34,7 +49,7 @@ export function inflatedGeometry(
   image: HTMLImageElement,
   opts: InflateOptions,
 ): BufferGeometry {
-  const k = `${key}|${opts.width.toFixed(3)}|${opts.height.toFixed(3)}|${opts.depth.toFixed(3)}|${opts.flatBack}`;
+  const k = `${key}|${opts.width.toFixed(3)}|${opts.height.toFixed(3)}|${opts.depth.toFixed(3)}|${opts.flatBack}|${opts.grounded ?? false}|${opts.squareness ?? 2}|${opts.fillBase ?? false}`;
   const hit = cache.get(k);
   if (hit) return hit;
   const geo = buildInflated(image, opts);
@@ -50,7 +65,7 @@ export function inflatedGeometry(
 }
 
 function buildInflated(image: HTMLImageElement, opts: InflateOptions): BufferGeometry {
-  const N = opts.resolution ?? 128;
+  const N = opts.resolution ?? 160;
   const aspect = image.naturalWidth / Math.max(1, image.naturalHeight);
   const gw = Math.max(8, Math.round(aspect >= 1 ? N : N * aspect));
   const gh = Math.max(8, Math.round(aspect >= 1 ? N / aspect : N));
@@ -81,11 +96,80 @@ function buildInflated(image: HTMLImageElement, opts: InflateOptions): BufferGeo
   }
   const lumMean = count ? lumSum / count : 0.5;
 
+  // Grounded: the columns that reach the bottom of the silhouette stand on
+  // the floor, so the floor below them doesn't count as "outside".
+  let lowest = -1;
+  for (let i = 0; i < W * H; i++) if (inside[i]) lowest = Math.max(lowest, (i / W) | 0);
+
+  // Base fill: each filled cell borrows the photo row it continues from.
+  const srcRow = new Int32Array(W * H).fill(-1);
+  if (opts.grounded && opts.fillBase && lowest > 0) {
+    const bottom = new Int32Array(W).fill(-1);
+    for (let x = 0; x < W; x++) {
+      for (let y = lowest; y >= 0; y--) {
+        if (inside[y * W + x]) {
+          bottom[x] = y;
+          break;
+        }
+      }
+    }
+    const band = Math.max(2, Math.round(gh * 0.06));
+    const maxGap = gh * 0.35;
+    const accepted = new Uint8Array(W);
+    const queue: number[] = [];
+    for (let x = 0; x < W; x++) {
+      if (bottom[x] >= 0 && bottom[x] >= lowest - band) {
+        accepted[x] = 1;
+        queue.push(x);
+      }
+    }
+    // Walk outward from where it touches the floor while the outline
+    // rises gently; a jump of more than a couple of cells is a real gap.
+    while (queue.length) {
+      const x = queue.pop()!;
+      for (const nx of [x - 1, x + 1]) {
+        if (nx < 0 || nx >= W || accepted[nx] || bottom[nx] < 0) continue;
+        if (Math.abs(bottom[nx] - bottom[x]) > 2 || lowest - bottom[nx] > maxGap) continue;
+        accepted[nx] = 1;
+        queue.push(nx);
+      }
+    }
+    for (let x = 0; x < W; x++) {
+      if (!accepted[x]) continue;
+      const from = bottom[x];
+      for (let y = from + 1; y <= lowest; y++) {
+        const i = y * W + x;
+        inside[i] = 1;
+        srcRow[i] = from;
+        lum[i] = lum[from * W + x];
+      }
+    }
+  }
+
+  const base = new Uint8Array(W);
+  if (opts.grounded && lowest > 0) {
+    const band = Math.max(2, Math.round(gh * 0.06));
+    for (let x = 0; x < W; x++) {
+      for (let y = lowest; y > lowest - band; y--) {
+        if (inside[y * W + x]) {
+          base[x] = 1;
+          break;
+        }
+      }
+    }
+  }
+  const ground = (x: number, y: number) => y > lowest - 1 && x >= 0 && x < W && base[x] === 1;
+
   // Chamfer distance to the outside (3-4 metric, two passes).
   const INF = 1e9;
   const dist = new Float32Array(W * H);
   for (let i = 0; i < W * H; i++) dist[i] = inside[i] ? INF : 0;
-  const at = (x: number, y: number) => (x < 0 || y < 0 || x >= W || y >= H ? 0 : dist[y * W + x]);
+  const at = (x: number, y: number) =>
+    ground(x, y) && (y >= H || !inside[y * W + x])
+      ? INF
+      : x < 0 || y < 0 || x >= W || y >= H
+        ? 0
+        : dist[y * W + x];
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
       const i = y * W + x;
@@ -115,7 +199,9 @@ function buildInflated(image: HTMLImageElement, opts: InflateOptions): BufferGeo
   for (let i = 0; i < W * H; i++) {
     if (!inside[i]) continue;
     const t = Math.min(1, Math.max(0, (dist[i] - 3) / span));
-    const round = Math.sqrt(t * (2 - t));
+    // Superellipse quarter: p=2 is a circle, larger p squares the shoulders.
+    const p = opts.squareness ?? 2;
+    const round = Math.pow(1 - Math.pow(1 - t, p), 1 / p);
     const relief = (lum[i] - lumMean) * 0.12 * t;
     height[i] = Math.max(RIM, RIM + (1 - RIM) * round + relief);
   }
@@ -125,6 +211,7 @@ function buildInflated(image: HTMLImageElement, opts: InflateOptions): BufferGeo
   const index = new Int32Array(W * H).fill(-1);
   const pos: number[] = [];
   const uv: number[] = [];
+  const col: number[] = [];
   const zFront = opts.flatBack ? opts.depth : opts.depth / 2;
   let n = 0;
   for (let y = 0; y < H; y++) {
@@ -135,7 +222,12 @@ function buildInflated(image: HTMLImageElement, opts: InflateOptions): BufferGeo
       const u = (x - 1 + 0.5) / gw;
       const v = (y - 1 + 0.5) / gh;
       pos.push((u - 0.5) * opts.width, (0.5 - v) * opts.height, height[i] * zFront);
+      // A filled base cell repeats the photo's bottom edge, shaded darker —
+      // the underside of a sofa is in its own shadow.
+      const filled = srcRow[i] >= 0;
       uv.push(u, 1 - v);
+      const shade = filled ? 0.62 : 1;
+      col.push(shade, shade, shade);
     }
   }
   const front = n;
@@ -173,6 +265,7 @@ function buildInflated(image: HTMLImageElement, opts: InflateOptions): BufferGeo
     const z = pos[k * 3 + 2];
     pos.push(pos[k * 3], pos[k * 3 + 1], opts.flatBack ? 0 : -z);
     uv.push(uv[k * 2], uv[k * 2 + 1]);
+    col.push(col[k * 3], col[k * 3 + 1], col[k * 3 + 2]);
   }
 
   const tris: number[] = [];
@@ -213,6 +306,7 @@ function buildInflated(image: HTMLImageElement, opts: InflateOptions): BufferGeo
   const geo = new BufferGeometry();
   geo.setAttribute("position", new BufferAttribute(new Float32Array(pos), 3));
   geo.setAttribute("uv", new BufferAttribute(new Float32Array(uv), 2));
+  geo.setAttribute("color", new BufferAttribute(new Float32Array(col), 3));
   geo.setIndex(tris);
   geo.computeVertexNormals();
   geo.computeBoundingBox();
@@ -235,7 +329,7 @@ export function bledCanvas(key: string, image: HTMLImageElement): HTMLCanvasElem
   const hit = bled.get(key);
   if (hit) return hit;
 
-  const s = Math.min(1, 512 / Math.max(image.naturalWidth, image.naturalHeight));
+  const s = Math.min(1, 1024 / Math.max(image.naturalWidth, image.naturalHeight));
   const W = Math.max(1, Math.round(image.naturalWidth * s));
   const H = Math.max(1, Math.round(image.naturalHeight * s));
   const canvas = document.createElement("canvas");
@@ -283,8 +377,32 @@ export function bledCanvas(key: string, image: HTMLImageElement): HTMLCanvasElem
     }
     solid = next;
   }
-  for (let i = 0; i < W * H; i++) d[i * 4 + 3] = 255;
+  // Everything further out gets a smooth blur of the nearest colours
+  // (push-pull: average down a pyramid, then fill holes coming back up), so
+  // a filled base under a sofa reads as its shaded underside, not stripes.
+  for (let i = 0; i < W * H; i++) d[i * 4 + 3] = solid[i] ? 255 : 0;
   ctx.putImageData(img, 0, 0);
-  bled.set(key, canvas);
-  return canvas;
+  const levels: HTMLCanvasElement[] = [canvas];
+  while (levels[levels.length - 1].width > 4 || levels[levels.length - 1].height > 4) {
+    const prev = levels[levels.length - 1];
+    const c = document.createElement("canvas");
+    c.width = Math.max(1, prev.width >> 1);
+    c.height = Math.max(1, prev.height >> 1);
+    const cx = c.getContext("2d")!;
+    cx.imageSmoothingQuality = "high";
+    cx.drawImage(prev, 0, 0, c.width, c.height);
+    // Re-normalise: a half-covered pixel keeps its colour, at full weight.
+    const id = cx.getImageData(0, 0, c.width, c.height);
+    for (let i = 3; i < id.data.length; i += 4) if (id.data[i] > 0) id.data[i] = 255;
+    cx.putImageData(id, 0, 0);
+    levels.push(c);
+  }
+  const out = document.createElement("canvas");
+  out.width = W;
+  out.height = H;
+  const octx = out.getContext("2d")!;
+  octx.imageSmoothingQuality = "high";
+  for (let l = levels.length - 1; l >= 0; l--) octx.drawImage(levels[l], 0, 0, W, H);
+  bled.set(key, out);
+  return out;
 }
