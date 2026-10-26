@@ -45,6 +45,10 @@ import { FURNITURE_MODELS } from "./FurnitureModel";
 import { bledCanvas, inflatedGeometry } from "@/lib/three/inflate";
 import { FinishMaterial, MergedBoxes, Slab, useSeeded } from "./finish";
 import { fitStrokes, neonStrokes } from "./neon";
+import { MirrorGlass } from "./mirror";
+import { TemplateModel } from "./templates";
+import { MeshModel } from "./meshModel";
+import { DECOR_MODELS } from "./decor";
 import { M, catenary, leafShape, seededRandom } from "./shapes";
 
 /**
@@ -2877,6 +2881,7 @@ function SculptedCutout({
   grounded = false,
   squareness = 2,
   fillBase = false,
+  depthMap,
 }: {
   texture: Texture;
   cacheKey: string;
@@ -2888,6 +2893,7 @@ function SculptedCutout({
   grounded?: boolean;
   squareness?: number;
   fillBase?: boolean;
+  depthMap?: Texture | null;
 }) {
   const geometry = React.useMemo(
     () =>
@@ -2899,8 +2905,9 @@ function SculptedCutout({
         grounded,
         squareness,
         fillBase,
+        depthMap: (depthMap?.image as HTMLImageElement | undefined) ?? null,
       }),
-    [cacheKey, texture, w, h, d, flatBack, grounded, squareness, fillBase],
+    [cacheKey, texture, w, h, d, flatBack, grounded, squareness, fillBase, depthMap],
   );
   // An opaque copy with the edge colours bled outward — the mesh defines the
   // silhouette, so the rim must not sample transparent fringe.
@@ -2924,89 +2931,6 @@ function SculptedCutout({
         emissiveIntensity={glow ? 0.8 : 0}
       />
     </mesh>
-  );
-}
-
-const _mirrorPos = new Vector3();
-
-/**
- * Mirror glass that reflects the actual room.
- *
- * A cube camera captures the scene from where the mirror stands, with the
- * glass hidden, and the glass shows that capture. It re-captures only once
- * the mirror has stayed put for a few frames — six small renders after a
- * move, not a second scene render every frame, which a phone can't afford.
- */
-function MirrorGlass({
-  shape,
-  mask,
-  position,
-  scale,
-}: {
-  /** The glass outline as a geometry element (a plane, a circle, an arch). */
-  shape: React.ReactNode;
-  /** Cuts the glass to a photo's mirror opening (alpha = glass). */
-  mask?: Texture;
-  position?: Vec3;
-  scale?: Vec3;
-}) {
-  const gl = useThree((st) => st.gl);
-  const scene = useThree((st) => st.scene);
-  const target = React.useMemo(() => new WebGLCubeRenderTarget(256, { type: HalfFloatType }), []);
-  const camera = React.useMemo(() => new CubeCamera(0.05, 30, target), [target]);
-  const mesh = React.useRef<Mesh>(null);
-  const last = React.useRef(new Vector3(Infinity, 0, 0));
-  const still = React.useRef(0);
-  const [ready, setReady] = React.useState(false);
-  React.useEffect(() => () => target.dispose(), [target]);
-
-  useFrame(() => {
-    const m = mesh.current;
-    if (!m) return;
-    m.getWorldPosition(_mirrorPos);
-    if (_mirrorPos.distanceToSquared(last.current) > 1e-6) {
-      last.current.copy(_mirrorPos);
-      still.current = 6;
-      return;
-    }
-    if (still.current > 0 && --still.current === 0) {
-      camera.position.copy(_mirrorPos);
-      m.visible = false;
-      // The walls hidden so the user can see into the room are still there
-      // for the mirror — a mirror facing the open side reflects that wall.
-      const shown: Object3D[] = [];
-      scene.traverse((o) => {
-        if (o.userData.isRoom && !o.visible) {
-          o.visible = true;
-          shown.push(o);
-        }
-      });
-      camera.update(gl, scene);
-      for (const o of shown) o.visible = false;
-      m.visible = true;
-      if (!ready) setReady(true);
-    }
-  });
-
-  // A basic material reads the capture as a plain cube map: a perfect mirror
-  // needs no blur, so it skips the prefiltering a standard material does.
-  const cut = mask ? { map: mask, alphaTest: 0.5 } : {};
-  return (
-    <group position={position} scale={scale}>
-      <mesh ref={mesh}>
-        {shape}
-        {ready ? (
-          <meshBasicMaterial {...cut} envMap={target.texture} color="#f1f5f7" />
-        ) : (
-          <meshStandardMaterial {...cut} color="#c9d2d8" roughness={0.05} metalness={0.9} />
-        )}
-      </mesh>
-      {/* The back of a mirror is its backing board, not more glass. */}
-      <mesh position={[0, 0, -0.002]}>
-        {shape}
-        <meshStandardMaterial {...cut} color="#3b3a38" roughness={0.9} side={BackSide} />
-      </mesh>
-    </group>
   );
 }
 
@@ -3037,7 +2961,28 @@ function CustomModel({ product, light, lightScale = 1 }: ModelProps) {
   const texKey = `${product.id}:${spec?.updatedAt ?? 0}`;
   const texture = useCustomImageTexture(texKey, spec?.image);
   const glassTex = useCustomImageTexture(`${texKey}:glass`, spec?.glass);
+  const depthTex = useCustomImageTexture(`${texKey}:depth`, spec?.depth);
   const mount = product.mount;
+
+  // ---- The item itself, generated in 3D from its photo ----
+  if (spec?.mesh) {
+    return (
+      <group>
+        <MeshModel cacheKey={texKey} dataUrl={spec.mesh} dims={product.dims} mount={mount} />
+        <ProductLight product={product} enabled={light} scale={lightScale} position={[0, M(product.dims.h) / 2, 0]} />
+      </group>
+    );
+  }
+
+  // ---- Matched model: a real sofa / table / mirror in the photo's colours ----
+  if (spec?.template) {
+    return (
+      <group>
+        <TemplateModel product={product} template={spec.template} />
+        <ProductLight product={product} enabled={light} scale={lightScale} position={[0, M(product.dims.h) / 2, 0]} />
+      </group>
+    );
+  }
 
   // ---- Plain shape: no photo, just a well-finished primitive ----
   if (!spec?.image) {
@@ -3112,7 +3057,7 @@ function CustomModel({ product, light, lightScale = 1 }: ModelProps) {
         {glassAt(0.005)}
         {style === "sculpted" ? (
           <group position={[0, 0, 0.002]}>
-            <SculptedCutout texture={texture} cacheKey={texKey} w={w} h={h} d={Math.max(0.01, d)} flatBack glow={glow} />
+            <SculptedCutout texture={texture} cacheKey={texKey} w={w} h={h} d={Math.max(0.01, d)} flatBack glow={glow} depthMap={depthTex} />
           </group>
         ) : style === "flat" ? (
           <mesh position={[0, 0, 0.006]} castShadow>
@@ -3152,6 +3097,7 @@ function CustomModel({ product, light, lightScale = 1 }: ModelProps) {
         grounded={mount !== "ceiling"}
         squareness={mount === "floor" && !spec.glass ? 2.4 : 2}
         fillBase={mount === "floor" && !spec.glass}
+        depthMap={depthTex}
       />
     ) : style === "flat" ? (
       <mesh castShadow>
@@ -3166,12 +3112,10 @@ function CustomModel({ product, light, lightScale = 1 }: ModelProps) {
     <group position={[0, y, 0]}>
       {style === "facing" ? (
         <FaceCamera>{body}</FaceCamera>
-      ) : style === "sculpted" && !spec.glass && mount !== "ceiling" ? (
-        // One photo shows one side; seen from the side or behind, a shape
-        // puffed out of it smears into streaks. So it always shows the side
-        // that was photographed — with real depth, shading and a flat base,
-        // it still reads as a solid object rather than a cardboard cutout.
-        <FaceCamera>{body}</FaceCamera>
+      ) : style === "sculpted" && !spec.glass && mount === "tabletop" ? (
+        // Small decor turns a little toward the viewer, so a figure's
+        // photographed side stays in view; furniture never moves on its own.
+        <FaceCamera limit={0.5}>{body}</FaceCamera>
       ) : (
         body
       )}
@@ -3241,7 +3185,7 @@ export function ProductModel({ size, ...props }: ModelProps) {
     return <CutoutPanel {...props} product={product} />;
   }
 
-  const Component = REGISTRY[product.model] ?? FURNITURE_MODELS[product.model];
+  const Component = REGISTRY[product.model] ?? DECOR_MODELS[product.model] ?? FURNITURE_MODELS[product.model];
   if (!Component) {
     // A catalog entry with an unknown model kind still gets a correctly-sized
     // box rather than disappearing — placement stays testable.

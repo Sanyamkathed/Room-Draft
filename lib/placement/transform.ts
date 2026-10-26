@@ -18,6 +18,7 @@ import { Box3, Euler, Quaternion, Vector3 } from "three";
 import type { Product } from "@/lib/catalog/types";
 import type { SurfaceId, Vec3 } from "@/lib/room/types";
 import type { Aabb, PlacedItem } from "./types";
+import { sofaSeat } from "@/lib/catalog/templateGeometry";
 
 /** Inward normal of each room surface. */
 export const SURFACE_NORMALS: Record<SurfaceId, Vec3> = {
@@ -276,6 +277,13 @@ function localLevels(product: Product, w: number, h: number, d: number): LocalLe
         { y: legH + t, x, z, clear },
         { y: legH + caseH / 2 + t / 2, x, z, clear },
       ];
+    }
+    case "custom": {
+      const t = product.custom?.template;
+      if (t?.kind !== "sofa" && t?.kind !== "armchair") return null;
+      // A matched sofa: things sit on its seat, between the arms.
+      const seat = sofaSeat(w, h, d, t);
+      return [{ y: seat.y, x: seat.x, z: seat.z, clear: h }];
     }
     default:
       return null;

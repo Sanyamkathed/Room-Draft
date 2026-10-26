@@ -37,6 +37,11 @@ export function RightPanel() {
   const removeItem = useStudio((s) => s.removeItem);
   const duplicateItem = useStudio((s) => s.duplicateItem);
   const { item, product } = useSelected();
+  // This item's own size (cm, before the overall scale) — a traced or
+  // stretched piece carries one; everything else is the catalogue size.
+  const dims = item?.size ?? product?.dims ?? { w: 1, h: 1, d: 1 };
+  // A traced piece's size IS its real size, so it never needs resetting.
+  const trueSize = !item || (Math.abs(item.scale - 1) < 0.01 && (!item.size || Boolean(item.trace)));
 
   return (
     <aside className="pointer-events-auto z-30 flex h-full w-full flex-col md:w-[286px] border-l border-white/8 bg-ink-1/90 backdrop-blur-xl">
@@ -111,8 +116,8 @@ export function RightPanel() {
           <div className="space-y-3 px-4 py-4">
             <SectionLabel
               action={
-                <Badge tone={Math.abs(item.scale - 1) < 0.01 ? "accent" : "neutral"}>
-                  {Math.abs(item.scale - 1) < 0.01 ? "TRUE SIZE" : `${Math.round(item.scale * 100)}%`}
+                <Badge tone={trueSize ? "accent" : "neutral"}>
+                  {trueSize ? "TRUE SIZE" : "RESIZED"}
                 </Badge>
               }
             >
@@ -122,10 +127,10 @@ export function RightPanel() {
             <p className="flex items-center gap-1.5 text-[11.5px] tabular-nums text-chalk-3">
               <Ruler className="size-3 text-chalk-4" />
               {formatDims(product)}
-              {Math.abs(item.scale - 1) >= 0.01 && (
+              {!trueSize && (
                 <span className="text-chalk-4">
-                  → {(product.dims.w * item.scale).toFixed(0)} ×{" "}
-                  {(product.dims.h * item.scale).toFixed(0)} cm
+                  → {Math.round(dims.w * item.scale)} × {Math.round(dims.h * item.scale)}
+                  {product.mount !== "wall" ? ` × ${Math.round(dims.d * item.scale)}` : ""} cm
                 </span>
               )}
             </p>
@@ -141,10 +146,27 @@ export function RightPanel() {
               onCommit={() => resolveItem(item.id)}
             />
 
-            {Math.abs(item.scale - 1) >= 0.01 && (
+            {/* Stretch one side at a time — a wider rug, a deeper sofa —
+                live in the room while dragging, settled on release. */}
+            {product.mount !== "edge" &&
+              (product.mount === "wall" ? (["w", "h"] as const) : (["w", "d", "h"] as const)).map((k) => (
+                <Slider
+                  key={k}
+                  label={k === "w" ? "Width" : k === "d" ? "Depth" : "Height"}
+                  value={dims[k]}
+                  min={Math.max(1, Math.round(product.dims[k] * 0.3))}
+                  max={Math.max(2, Math.round(product.dims[k] * 3))}
+                  step={product.dims[k] < 20 ? 0.5 : 1}
+                  format={(v) => `${Math.round(v * item.scale)} cm`}
+                  onChange={(v) => updateItem(item.id, { size: { ...dims, [k]: v } }, false)}
+                  onCommit={() => resolveItem(item.id)}
+                />
+              ))}
+
+            {!trueSize && (
               <button
                 onClick={() => {
-                  updateItem(item.id, { scale: 1 });
+                  updateItem(item.id, { scale: 1, size: item.trace ? item.size : undefined });
                   resolveItem(item.id);
                 }}
                 className="text-[11.5px] font-medium text-accent transition-opacity hover:opacity-75"
@@ -159,6 +181,9 @@ export function RightPanel() {
           {/* ---------------- Rotation ---------------- */}
           <div className="space-y-3 px-4 py-4">
             <SectionLabel>Rotation</SectionLabel>
+            <p className="text-[11px] leading-relaxed text-chalk-4">
+              On a touch screen, put two fingers on the item and twist to turn it.
+            </p>
             {isWallSurface(item.surface) ? (
               <Slider
                 label="Tilt on wall"
