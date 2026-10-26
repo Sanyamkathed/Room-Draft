@@ -79,6 +79,17 @@ export type ModelKind =
   | "mushroomLamp"
   | "cloudLight"
   | "checkerRug"
+  | "table"
+  | "accentChair"
+  | "curtains"
+  | "wallScroll"
+  | "macrame"
+  | "cushions"
+  | "pouf"
+  | "basket"
+  | "floorLamp"
+  | "tableLamp"
+  | "floorMirror"
   /** A user-made item: their own photo, or a plain shape. See CustomSpec. */
   | "custom"
   /* ---- furniture: the things already in the room ---- */
@@ -166,9 +177,31 @@ export type CustomStyle =
 
 export type CustomShape = "box" | "cylinder" | "sphere";
 
+/**
+ * A real 3D model of the item's type, built at its size in its photo's
+ * colours. One photo can't show a sofa's back or sides; a sofa model can.
+ */
+export interface CustomTemplate {
+  kind: "sofa" | "armchair" | "table" | "mirror";
+  /** Body, darker accent (legs, base), lighter accent (pillows) — from the photo. */
+  colours: [string, string, string];
+  seats?: 1 | 2 | 3 | 4;
+  arms?: "square" | "round";
+  /** Table top or mirror outline. */
+  shape?: "rect" | "rounded" | "round" | "arch";
+  /** Table base. */
+  base?: "legs" | "pedestal";
+}
+
 export interface CustomSpec {
+  /** Built as a matched 3D model instead of from the photo's outline. */
+  template?: CustomTemplate;
+  /** The item itself as a generated 3D model (self-contained GLB data URL). */
+  mesh?: string;
   /** Background-removed PNG data URL. Absent for plain shapes. */
   image?: string;
+  /** How near each part is (white = near), aligned with `image` — gives the 3D shape its real relief. */
+  depth?: string;
   /** A mirror's glass, as a mask PNG aligned with `image`; drawn reflective. */
   glass?: string;
   /** Other things can be set down on top of it (a side table, a rug). */

@@ -26,7 +26,7 @@ const normalMatrix = new Matrix3();
 const worldNormal = new Vector3();
 
 /** Walk up the scene graph to whatever carries the id we care about. */
-function findOwner(object: Object3D): {
+export function findOwner(object: Object3D): {
   itemId?: string;
   surfaceId?: SurfaceId;
   ghost?: boolean;
@@ -132,6 +132,9 @@ export function DragController() {
         yaw: existing?.yaw ?? 0,
         spin: existing?.spin ?? 0,
         scale: existing?.scale ?? 1,
+        // Moving keeps the item's own size and tracing, not the catalogue's.
+        size: existing?.size,
+        trace: existing?.trace,
         id: d.itemId,
       });
 

@@ -18,6 +18,7 @@ import { applyPhotoCamera, clearPhotoCamera } from "@/lib/three/photoCamera";
 import type { RoomGeometry, Vec3 } from "@/lib/room/types";
 import { useStudio, type CameraMode } from "@/lib/store/studio";
 import { DragController } from "./DragController";
+import { TwistController } from "./TwistController";
 import { PlacedObject } from "./PlacedObject";
 import { ProjectionPools } from "./ProjectionPool";
 import { RoomShell } from "./RoomShell";
@@ -447,6 +448,7 @@ function Scene() {
       <Lighting room={room} photoTexture={photoTexture} />
       <CameraRig room={room} />
       <DragController />
+      <TwistController />
 
       <RoomShell
         room={room}

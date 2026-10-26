@@ -23,25 +23,28 @@ const MODEL_URL = "/models/u2netp.onnx";
 const SIZE = 320;
 
 /* Minimal typing for the bits of onnxruntime-web used here. */
-interface OrtTensor {
+export interface OrtTensor {
   data: Float32Array;
   dims: readonly number[];
 }
-interface OrtSession {
+export interface OrtSession {
   inputNames: readonly string[];
   outputNames: readonly string[];
   run(feeds: Record<string, OrtTensor>): Promise<Record<string, OrtTensor>>;
 }
-interface Ort {
+export interface Ort {
   env: { wasm: { wasmPaths: string; numThreads: number } };
   Tensor: new (type: "float32", data: Float32Array, dims: number[]) => OrtTensor;
-  InferenceSession: { create(url: string, opts: Record<string, unknown>): Promise<OrtSession> };
+  InferenceSession: {
+    create(model: string | Uint8Array, opts: Record<string, unknown>): Promise<OrtSession>;
+  };
 }
 
 let ortPromise: Promise<Ort> | null = null;
 let sessionPromise: Promise<OrtSession> | null = null;
 
-function loadOrt(): Promise<Ort> {
+/** The shared runtime: both on-device models run on it. */
+export function loadOrt(): Promise<Ort> {
   if (!ortPromise) {
     ortPromise = new Promise<Ort>((resolve, reject) => {
       const existing = (window as unknown as { ort?: Ort }).ort;

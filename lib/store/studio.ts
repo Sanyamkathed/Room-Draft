@@ -302,7 +302,8 @@ export const useStudio = create<StudioState>((set, get) => {
       // whole set is re-settled so anything resting on the moved object follows.
       // Whatever was resting on a moved item comes with it.
       const before = draft.itemId ? items.find((i) => i.id === draft.itemId) : undefined;
-      const moved = before ? { ...item, id: before.id } : item;
+      // Keep what the resolver doesn't know about (a wall item's own photo).
+      const moved = before ? { ...before, ...item, id: before.id } : item;
       const next = before
         ? carryDependents(items, before, moved).map((i) => (i.id === before.id ? moved : i))
         : [...items, item];
@@ -407,11 +408,13 @@ export const useStudio = create<StudioState>((set, get) => {
         yaw: item.yaw,
         spin: item.spin,
         scale: item.scale,
+        size: item.size,
+        trace: item.trace,
         id,
       });
 
       if (!resolved?.valid) return;
-      const after = { ...resolved.item, id };
+      const after = { ...item, ...resolved.item, id };
       set({
         items: settleItems(
           carryDependents(items, item, after).map((i) => (i.id === id ? after : i)),

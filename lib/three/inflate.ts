@@ -37,6 +37,12 @@ export interface InflateOptions {
    * sudden step (between a chair's legs) stay open.
    */
   fillBase?: boolean;
+  /**
+   * A depth map of the photo (white = near), from lib/catalog/depth.ts. With
+   * it the front takes the object's real relief — a sofa's seat sits back
+   * from its arms — instead of a uniform cushion.
+   */
+  depthMap?: HTMLImageElement | null;
   /** Sampling resolution along the longer side. */
   resolution?: number;
 }
@@ -49,7 +55,7 @@ export function inflatedGeometry(
   image: HTMLImageElement,
   opts: InflateOptions,
 ): BufferGeometry {
-  const k = `${key}|${opts.width.toFixed(3)}|${opts.height.toFixed(3)}|${opts.depth.toFixed(3)}|${opts.flatBack}|${opts.grounded ?? false}|${opts.squareness ?? 2}|${opts.fillBase ?? false}`;
+  const k = `${key}|${opts.width.toFixed(3)}|${opts.height.toFixed(3)}|${opts.depth.toFixed(3)}|${opts.flatBack}|${opts.grounded ?? false}|${opts.squareness ?? 2}|${opts.fillBase ?? false}|${opts.depthMap ? 1 : 0}`;
   const hit = cache.get(k);
   if (hit) return hit;
   const geo = buildInflated(image, opts);
@@ -95,6 +101,25 @@ function buildInflated(image: HTMLImageElement, opts: InflateOptions): BufferGeo
     }
   }
   const lumMean = count ? lumSum / count : 0.5;
+
+  // Depth, sampled on the same grid as the silhouette.
+  const dep = opts.depthMap ? new Float32Array(W * H) : null;
+  if (dep && opts.depthMap) {
+    ctx.clearRect(0, 0, W, H);
+    ctx.drawImage(opts.depthMap, 1, 1, gw, gh);
+    const dp = ctx.getImageData(0, 0, W, H).data;
+    let sum = 0;
+    let n = 0;
+    for (let i = 0; i < W * H; i++) {
+      if (inside[i] && dp[i * 4 + 3] > 0) {
+        dep[i] = dp[i * 4] / 255;
+        sum += dep[i];
+        n++;
+      } else dep[i] = -1;
+    }
+    const mean = n ? sum / n : 0.5;
+    for (let i = 0; i < W * H; i++) if (dep[i] < 0) dep[i] = mean;
+  }
 
   // Grounded: the columns that reach the bottom of the silhouette stand on
   // the floor, so the floor below them doesn't count as "outside".
@@ -142,6 +167,7 @@ function buildInflated(image: HTMLImageElement, opts: InflateOptions): BufferGeo
         inside[i] = 1;
         srcRow[i] = from;
         lum[i] = lum[from * W + x];
+        if (dep) dep[i] = dep[from * W + x];
       }
     }
   }
@@ -195,6 +221,8 @@ function buildInflated(image: HTMLImageElement, opts: InflateOptions): BufferGeo
   // back — a knife-thin edge lights as a zig-zag when seen side-on.
   const RIM = 0.22;
   const height = new Float32Array(W * H);
+  // The unseen back is a smooth rounded shell; only the front has relief.
+  const backHeight = new Float32Array(W * H);
   const span = Math.max(1, maxD - 3);
   for (let i = 0; i < W * H; i++) {
     if (!inside[i]) continue;
@@ -202,8 +230,17 @@ function buildInflated(image: HTMLImageElement, opts: InflateOptions): BufferGeo
     // Superellipse quarter: p=2 is a circle, larger p squares the shoulders.
     const p = opts.squareness ?? 2;
     const round = Math.pow(1 - Math.pow(1 - t, p), 1 / p);
-    const relief = (lum[i] - lumMean) * 0.12 * t;
-    height[i] = Math.max(RIM, RIM + (1 - RIM) * round + relief);
+    backHeight[i] = RIM + (1 - RIM) * round;
+    if (dep) {
+      // Mostly the measured relief, eased in from the rim so front and
+      // back still close cleanly at the outline.
+      const shape = 0.35 * round + 0.65 * dep[i] * Math.min(1, t * 3);
+      height[i] = RIM + (1 - RIM) * shape;
+    } else {
+      const relief = (lum[i] - lumMean) * 0.12 * t;
+      height[i] = Math.max(RIM, RIM + (1 - RIM) * round + relief);
+      backHeight[i] = height[i];
+    }
   }
 
   // Vertices at cell centres for every inside cell; a quad becomes two
@@ -212,6 +249,7 @@ function buildInflated(image: HTMLImageElement, opts: InflateOptions): BufferGeo
   const pos: number[] = [];
   const uv: number[] = [];
   const col: number[] = [];
+  const backZ: number[] = [];
   const zFront = opts.flatBack ? opts.depth : opts.depth / 2;
   let n = 0;
   for (let y = 0; y < H; y++) {
@@ -222,6 +260,7 @@ function buildInflated(image: HTMLImageElement, opts: InflateOptions): BufferGeo
       const u = (x - 1 + 0.5) / gw;
       const v = (y - 1 + 0.5) / gh;
       pos.push((u - 0.5) * opts.width, (0.5 - v) * opts.height, height[i] * zFront);
+      backZ.push(backHeight[i] * zFront);
       // A filled base cell repeats the photo's bottom edge, shaded darker —
       // the underside of a sofa is in its own shadow.
       const filled = srcRow[i] >= 0;
@@ -262,8 +301,7 @@ function buildInflated(image: HTMLImageElement, opts: InflateOptions): BufferGeo
   }
   // Back surface: mirrored bulge, or flat against the wall.
   for (let k = 0; k < front; k++) {
-    const z = pos[k * 3 + 2];
-    pos.push(pos[k * 3], pos[k * 3 + 1], opts.flatBack ? 0 : -z);
+    pos.push(pos[k * 3], pos[k * 3 + 1], opts.flatBack ? 0 : -backZ[k]);
     uv.push(uv[k * 2], uv[k * 2 + 1]);
     col.push(col[k * 3], col[k * 3 + 1], col[k * 3 + 2]);
   }
