@@ -133,7 +133,7 @@ export function BeforeAfter({ onClose }: { onClose: () => void }) {
 
     downloadDataUrl(
       out.toDataURL("image/png"),
-      `${(project?.name ?? "aura-room").replace(/\s+/g, "-").toLowerCase()}-after.png`,
+      `${(project?.name ?? "roomdraft-room").replace(/\s+/g, "-").toLowerCase()}-after.png`,
     );
   }, [room, project?.name]);
 

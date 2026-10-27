@@ -1,8 +1,8 @@
 {
-  "name": "aura",
+  "name": "roomdraft",
   "version": "0.1.0",
   "private": true,
-  "description": "AURA \u2014 see your dream room before you buy anything.",
+  "description": "RoomDraft \u2014 see your dream room before you buy anything.",
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",

@@ -1,8 +1,8 @@
-# AURA
+# RoomDraft
 
 **See your dream room before you buy anything.**
 
-Photograph your room — one shot per surface — and AURA rebuilds it as real 3D
+Photograph your room — one shot per surface — and RoomDraft rebuilds it as real 3D
 geometry: four walls, floor and ceiling, each textured from the photo that saw
 it. Put your actual bed, desk and wardrobe in, then drop in aesthetic decor that
 is sized to its true centimetres, snaps to your real walls, rests on your real
@@ -37,7 +37,7 @@ A cold or wedged backend costs the user a 25-second timeout at worst.
 ## The idea
 
 Most "room designer" tools either make you build a floor plan by hand or paste
-flat PNG stickers over your photo. AURA does neither. It builds a *metric* room,
+flat PNG stickers over your photo. RoomDraft does neither. It builds a *metric* room,
 so a 60 x 90 cm poster is literally 0.6 x 0.9 world units against a wall of
 known width. Every downstream feature - automatic scaling, snapping, collision,
 stacking, the before/after - falls out of that one decision.
@@ -90,7 +90,7 @@ from the vanishing point to the image corners (the "spidery mesh" of *Tour Into
 The Picture*, Horry et al. 1997).
 
 **3. Metric scale** - one honest assumption
-A single image cannot determine absolute scale. AURA fixes it with the camera's
+A single image cannot determine absolute scale. RoomDraft fixes it with the camera's
 height above the floor, exposed as a slider rather than hidden as a magic
 number, and derives everything else from the pinhole geometry.
 

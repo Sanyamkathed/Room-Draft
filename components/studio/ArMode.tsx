@@ -126,7 +126,7 @@ export function ArMode({ onClose }: { onClose: () => void }) {
     }
     ctx.drawImage(gl, 0, 0, out.width, out.height);
 
-    downloadDataUrl(out.toDataURL("image/png"), `aura-ar-${product.id}.png`);
+    downloadDataUrl(out.toDataURL("image/png"), `roomdraft-ar-${product.id}.png`);
   }, [product.id]);
 
   // Height the product occupies on screen at the chosen distance, as a
@@ -186,7 +186,7 @@ export function ArMode({ onClose }: { onClose: () => void }) {
               <p className="mt-2 text-[13px] leading-relaxed text-chalk-3">
                 {status === "denied"
                   ? "Allow camera access in your browser's site settings, then reopen AR. Everything stays on your device — no frames are uploaded."
-                  : "Try opening AURA in Safari or Chrome on a phone."}
+                  : "Try opening RoomDraft in Safari or Chrome on a phone."}
               </p>
               <Button variant="secondary" className="mt-6" onClick={onClose}>
                 Back to the studio

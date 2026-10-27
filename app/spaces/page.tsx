@@ -40,7 +40,7 @@ export default function SpacesPage() {
           <EmptyState
             icon={<Plus className="size-5" />}
             title="No spaces yet"
-            body="Upload one photo of your room and AURA will rebuild it in 3D for you to design in."
+            body="Upload one photo of your room and RoomDraft will rebuild it in 3D for you to design in."
             action={
               <Link href="/onboarding" className={buttonClasses("primary", "md")}>
                 Upload your room

@@ -3,7 +3,8 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, Check, Layers, Sparkles, X, Zap } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Layers, X, Zap } from "lucide-react";
+import { Wordmark } from "@/components/brand/Logo";
 import { Button, Spinner, buttonClasses } from "@/components/ui/primitives";
 import { Calibrator } from "@/components/onboarding/Calibrator";
 import { DimensionsStep, SurfaceGrid } from "@/components/onboarding/FullRoomCapture";
@@ -369,10 +370,7 @@ export default function OnboardingPage() {
             </div>
           )}
 
-          <span className="ml-auto inline-flex items-center gap-1.5 text-[12.5px] font-semibold tracking-[-0.01em]">
-            <Sparkles className="size-3.5 text-accent" />
-            AURA
-          </span>
+          <Wordmark className="ml-auto h-4 w-auto text-chalk" />
         </div>
       </header>
 

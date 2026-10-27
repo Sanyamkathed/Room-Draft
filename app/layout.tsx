@@ -17,14 +17,14 @@ const display = Instrument_Serif({
 });
 
 export const metadata: Metadata = {
-  title: "AURA — See your dream room before you buy anything",
+  title: "RoomDraft — See your dream room before you buy anything",
   description:
     "Upload your room, get an accurate 3D version of it, and design it with aesthetic decor that scales and snaps like the real thing.",
-  applicationName: "AURA",
+  applicationName: "RoomDraft",
 };
 
 export const viewport: Viewport = {
-  themeColor: "#08080a",
+  themeColor: "#1c1814",
   width: "device-width",
   initialScale: 1,
   // The studio is a direct-manipulation surface; browser pinch-zoom would

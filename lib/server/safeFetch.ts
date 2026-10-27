@@ -154,7 +154,7 @@ function once(url: URL, maxBytes: number, timeoutMs: number, accept: string): Pr
           // A plain browser-like UA: many sites serve their Open Graph tags
           // only to agents they recognise. No cookies, no credentials, ever.
           "user-agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36 AURA-import",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36 RoomDraft-import",
           accept,
           "accept-language": "en-IN,en;q=0.8",
         },
