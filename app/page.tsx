@@ -1,250 +1,281 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, Camera, Plus, Ruler, Sofa, Sparkles } from "lucide-react";
-import { AESTHETICS } from "@/lib/catalog/types";
-import { PRODUCTS, PRODUCT_COUNT } from "@/lib/catalog/seed";
+import {
+  ArrowRight,
+  Box,
+  Camera,
+  Focus,
+  Plus,
+  Ruler,
+  Sofa,
+} from "lucide-react";
+import { PRODUCTS_BY_ID } from "@/lib/catalog/seed";
 import { formatINR } from "@/lib/catalog/source";
 import { useProjects } from "@/lib/hooks/useProjects";
-import { Badge, Skeleton, buttonClasses } from "@/components/ui/primitives";
-import { MoodTile } from "@/components/shell/MoodTile";
+import { Skeleton, buttonClasses } from "@/components/ui/primitives";
+import { AestheticCarousel } from "@/components/shell/AestheticCarousel";
 import { ProjectCard } from "@/components/shell/ProjectCard";
 import { ProductThumb } from "@/components/studio/ProductThumb";
+
+/**
+ * Pieces called out over the hero render. Positions are percentages of the
+ * image itself, so the tags stay on their furniture however the image is
+ * cropped.
+ */
+const HERO_TAGS = [
+  { id: "floor-lamp-tripod", x: 42.4, y: 33, side: "above" },
+  { id: "chair-velvet", x: 35, y: 56, side: "above" },
+  { id: "coffee-table-round", x: 50.5, y: 63, side: "below" },
+] as const;
+
+function SectionHeading({
+  title,
+  sub,
+  action,
+  id,
+}: {
+  title: string;
+  sub?: string;
+  action?: { href: string; label: string };
+  id?: string;
+}) {
+  return (
+    <header className="mb-6 flex flex-col items-start justify-between gap-3 md:flex-row md:items-end md:gap-6">
+      <div>
+        <h2
+          id={id}
+          className="font-[family-name:var(--font-display)] text-[clamp(32px,3.3vw,48px)] font-normal leading-[1.08] tracking-[-0.03em] text-chalk"
+        >
+          {title}
+        </h2>
+        {sub && <p className="mt-2 text-[14px] text-chalk-3">{sub}</p>}
+      </div>
+      {action && (
+        <Link
+          href={action.href}
+          className="group inline-flex shrink-0 items-center gap-1.5 text-[13px] font-medium text-accent transition-colors hover:text-accent-hover"
+        >
+          {action.label}
+          <ArrowRight className="size-3.5 transition-transform duration-300 group-hover:translate-x-0.5" />
+        </Link>
+      )}
+    </header>
+  );
+}
 
 export default function HomePage() {
   const { projects, loading, remove } = useProjects();
   const recent = projects?.slice(0, 4) ?? [];
-  const featured = PRODUCTS.filter((p) => p.emissive).slice(0, 6);
 
   return (
-    <div className="mx-auto max-w-[1240px] px-5 py-8 md:px-10 md:py-12">
+    <div>
       {/* ---------------- Hero ---------------- */}
-      <section className="relative overflow-hidden rounded-[28px] border border-white/10 bg-ink-1/15 grain">
+      <section className="relative isolate flex min-h-[720px] items-end overflow-hidden bg-ink-0 [container-type:inline-size] md:min-h-[clamp(560px,45vw,700px)] md:items-center">
+        {/* The render and its tags share one box with the image's own aspect
+            ratio, sized to cover the hero, so tags track the furniture. */}
         <div
-          className="pointer-events-none absolute -right-24 -top-24 size-[460px] rounded-full blur-[90px] opacity-45 animate-breathe"
-          style={{
-            background:
-              "radial-gradient(circle, rgba(216,255,60,0.28) 0%, rgba(124,77,255,0.18) 45%, transparent 70%)",
-          }}
+          aria-hidden
+          className="absolute left-1/2 top-0 -z-20 aspect-[1920/1023] w-[max(100cqw,640px)] -translate-x-[58%] md:w-[max(100cqw,1320px)] md:left-0 md:top-1/2 md:-translate-y-1/2 md:translate-x-[14%]"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/hero/room.jpg"
+            alt=""
+            className="absolute inset-0 size-full object-cover"
+            fetchPriority="high"
+          />
+        </div>
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 -z-10 bg-[linear-gradient(0deg,rgba(36,31,26,1)_0%,rgba(36,31,26,0.89)_46%,rgba(36,31,26,0.16)_100%),linear-gradient(90deg,rgba(36,31,26,0.35),transparent)] md:bg-[linear-gradient(90deg,rgba(36,31,26,0.98)_0%,rgba(36,31,26,0.91)_26%,rgba(36,31,26,0.56)_48%,rgba(36,31,26,0.08)_76%)]"
+        />
+        {/* The render melts into the page colour, so the sections below read
+            as the same room rather than a new band */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 bottom-0 -z-10 h-[55%] bg-[linear-gradient(to_top,var(--color-ink-0)_0%,var(--color-ink-0)_14%,rgba(36,31,26,0.82)_42%,transparent_100%)]"
         />
 
-        <div className="relative px-6 py-12 md:px-14 md:py-20">
-          <Badge tone="accent" className="mb-6">
-            <Sparkles className="size-3" /> 3D from one photo
-          </Badge>
+        {/* Product callouts, desktop only — on a phone they would sit under the copy */}
+        <div className="absolute left-0 top-1/2 hidden aspect-[1920/1023] w-[max(100cqw,1320px)] -translate-y-1/2 translate-x-[14%] lg:block">
+          {HERO_TAGS.map(({ id, x, y, side }) => {
+            const p = PRODUCTS_BY_ID.get(id);
+            if (!p) return null;
+            return (
+              <div
+                key={id}
+                className="absolute"
+                style={{ left: `${x}%`, top: `${y}%` }}
+              >
+                <span className="absolute -left-[7px] -top-[7px] grid size-[14px] place-items-center rounded-full border-2 border-accent bg-ink-1/60">
+                  <span className="size-1 rounded-full bg-accent" />
+                </span>
+                <span
+                  className={
+                    side === "above"
+                      ? "absolute bottom-[7px] left-0 h-9 w-px bg-white/30"
+                      : "absolute left-0 top-[7px] h-9 w-px bg-white/30"
+                  }
+                />
+                <Link
+                  href={`/shop?q=${encodeURIComponent(p.name)}`}
+                  className={`group absolute left-[-12px] inline-flex items-center gap-2.5 whitespace-nowrap rounded-[12px] border border-white/20 bg-[rgba(35,35,31,0.86)] py-2 pl-2 pr-3 text-chalk shadow-[0_8px_24px_rgba(0,0,0,0.18)] backdrop-blur-[12px] transition-colors hover:border-white/35 ${
+                    side === "above" ? "bottom-[43px]" : "top-[43px]"
+                  }`}
+                >
+                  <ProductThumb product={p} className="size-[38px] rounded-[8px]" />
+                  <span>
+                    <span className="block text-[12.5px] font-medium leading-tight">{p.name}</span>
+                    <small className="mt-0.5 block text-[11px] text-chalk-2">
+                      {formatINR(p.price)}
+                    </small>
+                  </span>
+                  <ArrowRight className="ml-1 size-3.5 text-chalk-2 transition-transform duration-300 group-hover:translate-x-0.5" />
+                </Link>
+              </div>
+            );
+          })}
+        </div>
 
-          <h1 className="text-display text-[42px] leading-[0.95] md:text-[76px] max-w-[16ch]">
+        <div className="relative w-full px-[22px] pb-[34px] pt-[260px] md:w-[min(640px,68%)] md:px-[clamp(28px,6.5vw,100px)] md:py-[clamp(42px,6vw,88px)] lg:w-[min(640px,56%)]">
+          <span className="eyebrow rounded-full border border-accent/35 px-3 py-1.5 text-[10.5px]">
+            Design · Visualize · Shop
+          </span>
+
+          <h1 className="mt-[22px] mb-5 max-w-[680px] font-[family-name:var(--font-display)] text-[clamp(44px,12vw,62px)] font-normal leading-[0.99] tracking-[-0.035em] text-chalk md:text-[clamp(48px,5.6vw,82px)]">
             Design your space
             <br />
-            <span className="text-chalk-3">before you buy it.</span>
+            before you buy it.
           </h1>
 
-          <p className="mt-6 max-w-[52ch] text-[15px] leading-relaxed text-chalk-2 md:text-[16.5px]">
-            Upload a photo of your room. AURA measures it, rebuilds it in 3D, and lets
-            you drop in neon, posters, plants and figures that scale to their real
-            centimetres and snap where they belong.
+          <p className="max-w-[510px] text-[clamp(15px,1.25vw,18px)] leading-[1.7] text-chalk-2">
+            Upload a photo of your room, try furniture and decor in 3D, and discover
+            pieces that actually fit your space.
           </p>
 
-          <div className="mt-9 flex flex-wrap items-center gap-3">
-            <Link
-              href="/onboarding"
-              className={buttonClasses("primary", "lg", "group gap-2.5")}
-            >
-              <Camera className="size-[18px]" strokeWidth={2.2} />
+          <div className="mt-[30px] flex flex-col gap-3 min-[421px]:flex-row min-[421px]:flex-wrap">
+            <Link href="/onboarding" className={buttonClasses("primary", "lg", "group")}>
+              <Camera className="size-[17px]" strokeWidth={2} />
               Upload your room
               <ArrowRight className="size-4 transition-transform duration-300 group-hover:translate-x-0.5" />
             </Link>
             <Link href="/discover" className={buttonClasses("outline", "lg")}>
-              Browse aesthetics
+              Explore aesthetics
             </Link>
           </div>
 
-          <dl className="mt-12 flex flex-wrap gap-x-10 gap-y-4 border-t border-white/7 pt-7">
+          <dl className="mt-[30px] flex flex-wrap gap-[18px] md:mt-11 md:gap-7">
             {[
-              ["Real scale", "Every item sized in cm"],
-              ["Snap + collide", "Nothing floats or clips"],
-              [`${PRODUCT_COUNT} curated pieces`, "Built for small spaces"],
-            ].map(([k, v]) => (
-              <div key={k}>
-                <dt className="text-[13px] font-medium text-chalk tracking-[-0.01em]">{k}</dt>
-                <dd className="text-[12.5px] text-chalk-3 mt-0.5">{v}</dd>
+              { icon: Box, k: "Real scale", v: "Every item sized in cm" },
+              { icon: Focus, k: "Snap + collide", v: "Nothing floats or clips" },
+              { icon: Sofa, k: "100+ curated pieces", v: "Built for real spaces" },
+            ].map(({ icon: Icon, k, v }) => (
+              <div key={k} className="flex min-w-[125px] items-start gap-2.5 md:min-w-[135px]">
+                <Icon className="mt-0.5 size-[18px] shrink-0 text-warm" strokeWidth={1.6} />
+                <div>
+                  <dt className="text-[13px] font-semibold text-chalk">{k}</dt>
+                  <dd className="mt-[3px] text-[12px] text-chalk-3">{v}</dd>
+                </div>
               </div>
             ))}
           </dl>
         </div>
       </section>
 
-      {/* ---------------- How it works ---------------- */}
-      <section className="mt-14" aria-labelledby="how-it-works">
-        <header className="mb-5">
-          <h2 id="how-it-works" className="text-[22px] font-semibold tracking-[-0.025em]">
-            How AURA works
-          </h2>
-          <p className="mt-1 text-[13px] text-chalk-3">
-            See decor in your own room before you spend a rupee
-          </p>
-        </header>
+      <div className="mx-auto w-[min(calc(100%-32px),1440px)] md:w-[min(calc(100%-64px),1440px)]">
+        {/* ---------------- Aesthetics ---------------- */}
+        <section className="pt-[clamp(48px,6vw,88px)]">
+          <SectionHeading
+            title="Explore aesthetics"
+            sub="Pick a direction and we'll recommend around it"
+            action={{ href: "/discover", label: "View all styles" }}
+          />
 
-        <ol className="grid gap-3 md:grid-cols-3">
-          {[
-            {
-              icon: Camera,
-              title: "Upload a photo",
-              body: "Take one picture of your room. Nothing leaves your device unless you choose.",
-            },
-            {
-              icon: Ruler,
-              title: "We rebuild it in 3D",
-              body: "AURA works out the walls, floor and size, so everything you add is true to scale.",
-            },
-            {
-              icon: Sofa,
-              title: "Drop in decor",
-              body: "Place lamps, posters, plants and furniture. They sit on tables and hang on walls.",
-            },
-          ].map(({ icon: Icon, title, body }, i) => (
-            <li
-              key={title}
-              className="relative rounded-[var(--radius-card)] border border-white/10 bg-ink-1/70 p-5 backdrop-blur-sm"
-            >
-              <div className="mb-4 flex items-center justify-between">
-                <span className="grid size-10 place-items-center rounded-[12px] bg-accent/12 text-accent ring-1 ring-accent/25">
-                  <Icon className="size-5" strokeWidth={1.9} />
-                </span>
-                <span className="text-[12px] font-medium tabular-nums text-chalk-4">
-                  Step {i + 1}
-                </span>
-              </div>
-              <h3 className="text-[15px] font-semibold tracking-[-0.015em]">{title}</h3>
-              <p className="mt-1.5 text-[13px] leading-relaxed text-chalk-3">{body}</p>
-            </li>
-          ))}
-        </ol>
-      </section>
+          <AestheticCarousel autoplay />
+        </section>
 
-      {/* ---------------- Continue designing ---------------- */}
-      <section className="mt-14">
-        <header className="mb-5 flex items-end justify-between gap-4">
-          <div>
-            <h2 className="text-[22px] font-semibold tracking-[-0.025em]">
-              Continue designing
-            </h2>
-            <p className="mt-1 text-[13px] text-chalk-3">Pick up where you left off</p>
-          </div>
-          {recent.length > 0 && (
-            <Link
-              href="/spaces"
-              className="group inline-flex items-center gap-1.5 text-[13px] font-medium text-chalk-2 transition-colors hover:text-chalk"
-            >
-              All spaces
-              <ArrowRight className="size-3.5 transition-transform duration-300 group-hover:translate-x-0.5" />
-            </Link>
-          )}
-        </header>
+        {/* ---------------- How it works ---------------- */}
+        <section className="scroll-mt-24 pt-[clamp(48px,6vw,88px)]" id="how-it-works" aria-labelledby="how-it-works-title">
+          <SectionHeading
+            id="how-it-works-title"
+            title="How RoomDraft works"
+            sub="See decor in your own room before you spend a rupee"
+          />
 
-        {loading ? (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {[0, 1, 2, 3].map((i) => (
-              <Skeleton key={i} className="aspect-[4/3]" />
-            ))}
-          </div>
-        ) : recent.length === 0 ? (
-          <Link
-            href="/onboarding"
-            className="group flex aspect-[16/7] w-full flex-col items-center justify-center gap-3 rounded-[var(--radius-card)] border border-dashed border-white/12 bg-ink-1/90 transition-all duration-300 hover:border-accent/40 hover:bg-ink-1"
-          >
-            <div className="grid size-12 place-items-center rounded-[14px] bg-white/6 text-chalk-2 transition-all duration-300 group-hover:bg-accent group-hover:text-black">
-              <Plus className="size-5" strokeWidth={2.2} />
-            </div>
-            <p className="text-[14px] font-medium">Create your first space</p>
-            <p className="text-[12.5px] text-chalk-3">
-              One photo is enough to get started
-            </p>
-          </Link>
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {recent.map((p) => (
-              <ProjectCard key={p.id} project={p} onDelete={remove} />
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* ---------------- Inspiration ---------------- */}
-      <section className="mt-14">
-        <header className="mb-5 flex items-end justify-between gap-4">
-          <div>
-            <h2 className="text-[22px] font-semibold tracking-[-0.025em]">
-              Find your aesthetic
-            </h2>
-            <p className="mt-1 text-[13px] text-chalk-3">
-              Pick a direction and we&apos;ll recommend around it
-            </p>
-          </div>
-          <Link
-            href="/discover"
-            className="group inline-flex items-center gap-1.5 text-[13px] font-medium text-chalk-2 transition-colors hover:text-chalk"
-          >
-            Discover
-            <ArrowRight className="size-3.5 transition-transform duration-300 group-hover:translate-x-0.5" />
-          </Link>
-        </header>
-
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
-          {AESTHETICS.slice(0, 5).map((a, i) => (
-            <Link key={a.id} href={`/discover?theme=${a.id}`} className="group">
-              <MoodTile
-                aesthetic={a.id}
-                seed={i}
-                className="aspect-[3/4] transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-[1.02]"
+          <ol className="grid gap-4 md:grid-cols-3">
+            {[
+              {
+                icon: Camera,
+                title: "Upload a photo",
+                body: "Take one picture of your room. Nothing leaves your device unless you choose.",
+              },
+              {
+                icon: Ruler,
+                title: "We rebuild it in 3D",
+                body: "RoomDraft works out the walls, floor and size, so everything you add is true to scale.",
+              },
+              {
+                icon: Sofa,
+                title: "Drop in decor",
+                body: "Place lamps, posters, plants and furniture. They sit on tables and hang on walls.",
+              },
+            ].map(({ icon: Icon, title, body }, i) => (
+              <li
+                key={title}
+                className="rounded-[var(--radius-card)] border border-line bg-ink-2 p-6"
               >
-                <div className="absolute inset-x-0 bottom-0 p-4">
-                  <p className="text-[14px] font-semibold tracking-[-0.02em] text-white">
-                    {a.label}
-                  </p>
-                  <p className="mt-0.5 text-[11.5px] leading-snug text-white/65">
-                    {a.blurb}
-                  </p>
+                <div className="mb-5 flex items-center justify-between">
+                  <span className="grid size-10 place-items-center rounded-[12px] border border-line text-warm">
+                    <Icon className="size-5" strokeWidth={1.7} />
+                  </span>
+                  <span className="eyebrow text-chalk-4">Step {i + 1}</span>
                 </div>
-              </MoodTile>
-            </Link>
-          ))}
-        </div>
-      </section>
+                <h3 className="text-[15px] font-semibold tracking-[-0.015em]">{title}</h3>
+                <p className="mt-1.5 text-[13px] leading-relaxed text-chalk-3">{body}</p>
+              </li>
+            ))}
+          </ol>
+        </section>
 
-      {/* ---------------- Products ---------------- */}
-      <section className="mt-14 mb-4">
-        <header className="mb-5 flex items-end justify-between gap-4">
-          <div>
-            <h2 className="text-[22px] font-semibold tracking-[-0.025em]">
-              Light it up
-            </h2>
-            <p className="mt-1 text-[13px] text-chalk-3">
-              Pieces that actually cast light in your 3D room
-            </p>
-          </div>
-          <Link
-            href="/shop?category=lighting"
-            className="group inline-flex items-center gap-1.5 text-[13px] font-medium text-chalk-2 transition-colors hover:text-chalk"
-          >
-            Shop all
-            <ArrowRight className="size-3.5 transition-transform duration-300 group-hover:translate-x-0.5" />
-          </Link>
-        </header>
+        {/* ---------------- Continue designing ---------------- */}
+        <section className="pb-[clamp(48px,6vw,88px)] pt-[clamp(48px,6vw,88px)]">
+          <SectionHeading
+            title="Continue designing"
+            sub="Pick up where you left off"
+            action={recent.length > 0 ? { href: "/spaces", label: "All spaces" } : undefined}
+          />
 
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
-          {featured.map((p) => (
-            <Link key={p.id} href={`/shop?q=${encodeURIComponent(p.name)}`} className="group">
-              <ProductThumb
-                product={p}
-                className="aspect-square w-full rounded-[16px] transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-[1.03]"
-              />
-              <p className="mt-2 truncate text-[12.5px] font-medium text-chalk">{p.name}</p>
-              <p className="text-[12px] text-chalk-3">{formatINR(p.price)}</p>
+          {loading ? (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {[0, 1, 2, 3].map((i) => (
+                <Skeleton key={i} className="aspect-[4/3]" />
+              ))}
+            </div>
+          ) : recent.length === 0 ? (
+            <Link
+              href="/onboarding"
+              className="group grid min-h-[250px] place-items-center rounded-[24px] border border-dashed border-accent/45 bg-ink-2 p-8 text-center transition-colors duration-200 hover:border-accent hover:bg-ink-3"
+            >
+              <div>
+                <div className="mx-auto mb-3.5 grid size-12 place-items-center rounded-[14px] bg-accent text-accent-ink">
+                  <Plus className="size-5" strokeWidth={2.2} />
+                </div>
+                <h3 className="text-[16px] font-semibold">Create your first space</h3>
+                <p className="mt-[7px] text-[13px] text-chalk-3">
+                  One photo is enough to get started
+                </p>
+              </div>
             </Link>
-          ))}
-        </div>
-      </section>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {recent.map((p) => (
+                <ProjectCard key={p.id} project={p} onDelete={remove} />
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
     </div>
   );
 }

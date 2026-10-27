@@ -9,6 +9,7 @@ import { formatDims, formatINR } from "@/lib/catalog/source";
 import { AESTHETICS, aestheticById, type AestheticId } from "@/lib/catalog/types";
 import { useProjects, usePreferences } from "@/lib/hooks/useProjects";
 import { MoodTile, PaletteDots } from "@/components/shell/MoodTile";
+import { AestheticCarousel } from "@/components/shell/AestheticCarousel";
 import { ProductThumb } from "@/components/studio/ProductThumb";
 import { Button, Chip, buttonClasses } from "@/components/ui/primitives";
 import { storage } from "@/lib/storage/idb";
@@ -232,33 +233,9 @@ function DiscoverContent() {
         </section>
       )}
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
-        {AESTHETICS.map((a, i) => (
-          <Link key={a.id} href={`/discover?theme=${a.id}`} className="group">
-            <MoodTile
-              aesthetic={a.id}
-              seed={i}
-              className="aspect-[3/4] transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-[1.02]"
-            >
-              <div className="absolute inset-x-0 bottom-0 p-4">
-                <p className="text-[14px] font-semibold tracking-[-0.02em] text-white">
-                  {a.label}
-                </p>
-                <p className="mt-0.5 text-[11.5px] leading-snug text-white/60">
-                  {a.blurb}
-                </p>
-              </div>
-              {saved.includes(a.id) && (
-                <span className="absolute right-3 top-3 grid size-6 place-items-center rounded-full bg-accent text-black">
-                  <BookmarkCheck className="size-3.5" strokeWidth={2.6} />
-                </span>
-              )}
-            </MoodTile>
-          </Link>
-        ))}
-      </div>
+      <AestheticCarousel saved={saved} showJumpList />
 
-      <div className="mt-10 flex flex-wrap items-center gap-3 rounded-[var(--radius-card)] border border-white/8 bg-ink-1 px-5 py-4">
+      <div className="mt-12 flex flex-wrap items-center gap-3 rounded-[var(--radius-card)] border border-line bg-ink-2 px-5 py-4">
         <p className="flex-1 text-[13px] text-chalk-2">
           Got a room in mind? Upload it and try these themes against your real walls.
         </p>

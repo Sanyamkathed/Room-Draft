@@ -12,17 +12,17 @@ type ButtonSize = "sm" | "md" | "lg";
 
 const VARIANTS: Record<ButtonVariant, string> = {
   primary:
-    "bg-accent text-black hover:bg-white active:bg-white/90 shadow-[0_6px_24px_-8px_rgba(216,255,60,0.55)]",
+    "bg-accent text-accent-ink hover:bg-accent-hover active:translate-y-px",
   secondary: "bg-ink-3 text-chalk hover:bg-ink-4 border border-white/8",
   ghost: "bg-transparent text-chalk-2 hover:text-chalk hover:bg-white/6",
   danger: "bg-danger/12 text-danger hover:bg-danger/20 border border-danger/25",
-  outline: "border border-white/14 text-chalk hover:bg-white/6 hover:border-white/25",
+  outline: "border border-line-strong text-chalk hover:bg-white/[0.045] hover:border-[rgb(236_232_219/0.38)] active:translate-y-px",
 };
 
 const SIZES: Record<ButtonSize, string> = {
   sm: "h-8 px-3 text-[12.5px] gap-1.5 rounded-[9px]",
   md: "h-10 px-4 text-[13.5px] gap-2 rounded-[11px]",
-  lg: "h-12 px-6 text-[15px] gap-2.5 rounded-[13px]",
+  lg: "h-[46px] px-5 text-[14px] font-[550] gap-2.5 rounded-[13px]",
 };
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {

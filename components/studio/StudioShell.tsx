@@ -168,7 +168,7 @@ export function StudioShell() {
     if (!canvas) return;
     downloadDataUrl(
       canvas.toDataURL("image/png"),
-      `${(project?.name ?? "aura-room").replace(/\s+/g, "-").toLowerCase()}.png`,
+      `${(project?.name ?? "roomdraft-room").replace(/\s+/g, "-").toLowerCase()}.png`,
     );
   }, [project?.name]);
 
