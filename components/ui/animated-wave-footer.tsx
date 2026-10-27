@@ -73,7 +73,7 @@ export default function AnimatedWaveFooter({ className }: { className?: string }
   return (
     <footer
       className={cn(
-        "relative isolate overflow-hidden bg-[linear-gradient(to_bottom,var(--color-ink-0)_0%,#2c241c_45%,#3a2d20_100%)] pt-24",
+        "relative isolate overflow-hidden bg-[linear-gradient(to_bottom,var(--color-ink-0)_0%,#2c241c_45%,#3a2d20_100%)] pt-12 md:pt-24",
         className,
       )}
     >
@@ -93,8 +93,9 @@ export default function AnimatedWaveFooter({ className }: { className?: string }
       </div>
 
       <div className="relative mx-auto w-[min(calc(100%-32px),1440px)] md:w-[min(calc(100%-64px),1440px)]">
-        <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-4">
-          <div>
+        {/* Phones: the two link lists sit side by side, so contact details stay above the tab bar */}
+        <div className="grid grid-cols-2 gap-x-6 gap-y-9 md:gap-10 lg:grid-cols-4">
+          <div className="col-span-2 md:col-span-1">
             <h2 className="mb-4 font-[family-name:var(--font-display)] text-[30px] font-bold leading-none tracking-[-0.04em] text-chalk">
               Stay connected
             </h2>
@@ -134,7 +135,7 @@ export default function AnimatedWaveFooter({ className }: { className?: string }
             </nav>
           </div>
 
-          <div>
+          <div className="col-span-2 md:col-span-1">
             <h3 className="mb-4 text-[15px] font-semibold text-chalk">Contact us</h3>
             <address className="space-y-3 text-[13px] not-italic">
               <a
@@ -157,7 +158,7 @@ export default function AnimatedWaveFooter({ className }: { className?: string }
           </div>
         </div>
 
-        <div className="mt-14 flex flex-col items-center justify-between gap-4 border-t border-line py-8 md:flex-row">
+        <div className="mt-10 flex flex-col items-center justify-between gap-4 border-t border-line py-6 md:mt-14 md:flex-row md:py-8">
           <Wordmark className="h-5 w-auto text-chalk-2" />
           <p className="flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-[12.5px] text-chalk-3">
             <Link href="/privacy" className="transition-colors hover:text-chalk">
