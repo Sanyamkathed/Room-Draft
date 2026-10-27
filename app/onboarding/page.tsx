@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, Check, Layers, X, Zap } from "lucide-react";
 import { Wordmark } from "@/components/brand/Logo";
+import { TrySampleRoom } from "@/components/shell/TrySampleRoom";
 import { Button, Spinner, buttonClasses } from "@/components/ui/primitives";
 import { Calibrator } from "@/components/onboarding/Calibrator";
 import { DimensionsStep, SurfaceGrid } from "@/components/onboarding/FullRoomCapture";
@@ -399,7 +400,7 @@ export default function OnboardingPage() {
               >
                 <div
                   className="pointer-events-none absolute -right-16 -top-16 size-48 rounded-full blur-[60px] opacity-40"
-                  style={{ background: "rgba(216,255,60,0.35)" }}
+                  style={{ background: "rgba(212,171,116,0.35)" }}
                 />
                 <div className="relative">
                   <div className="flex items-center gap-2">
@@ -459,6 +460,11 @@ export default function OnboardingPage() {
                   <ArrowRight className="size-4 transition-transform duration-300 group-hover:translate-x-0.5" />
                 </span>
               </button>
+            </div>
+
+            <div className="mt-8 flex flex-wrap items-center gap-3 border-t border-line pt-6 text-[13.5px] text-chalk-2">
+              No photo handy?
+              <TrySampleRoom variant="outline" size="md" label="Try a furnished sample room" />
             </div>
           </div>
         )}

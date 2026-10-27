@@ -168,18 +168,24 @@ function cleanTitle(raw?: string): string {
 
 export function CustomItemDialog({
   initial,
+  initialLink,
+  initialName,
   onClose,
   onSaved,
 }: {
   /** Editing an existing item; omit to make a new one. */
   initial?: Product;
+  /** A link to import straight away, e.g. a Pin picked in the inspo feed. */
+  initialLink?: string;
+  /** A name to start from when the link itself carries none. */
+  initialName?: string;
   onClose: () => void;
   /** `place` is true when the user chose "Save and place". */
   onSaved: (product: Product, place: boolean) => void;
 }) {
   const spec0 = initial?.custom;
   const [source, setSource] = React.useState<Source>(spec0 ? (spec0.image ? "upload" : "shape") : "link");
-  const [link, setLink] = React.useState(spec0?.sourceUrl ?? "");
+  const [link, setLink] = React.useState(spec0?.sourceUrl ?? initialLink ?? "");
   const [rawImage, setRawImage] = React.useState<string | null>(null);
   const [image, setImage] = React.useState<string | undefined>(spec0?.image);
   const [aspect, setAspect] = React.useState<number | null>(
@@ -196,7 +202,7 @@ export function CustomItemDialog({
   const [error, setError] = React.useState<string | null>(null);
   const [warning, setWarning] = React.useState<string | null>(null);
 
-  const [name, setName] = React.useState(initial?.name ?? "");
+  const [name, setName] = React.useState(initial?.name ?? cleanTitle(initialName));
   const [kind, setKind] = React.useState<Kind>(
     spec0?.style === "rug" ? "rug" : (initial?.mount ?? "wall"),
   );
@@ -376,6 +382,16 @@ export function CustomItemDialog({
       setBusy(null);
     }
   };
+
+  // A Pin handed over from the inspo feed starts importing as the dialog opens.
+  const autoImported = React.useRef(false);
+  React.useEffect(() => {
+    if (!initialLink || initial || autoImported.current) return;
+    autoImported.current = true;
+    void importLink();
+    // Once, on open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const onFile = async (file: File) => {
     setError(null);

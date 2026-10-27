@@ -17,6 +17,7 @@ import { Skeleton, buttonClasses } from "@/components/ui/primitives";
 import { AestheticCarousel } from "@/components/shell/AestheticCarousel";
 import { ProjectCard } from "@/components/shell/ProjectCard";
 import { ProductThumb } from "@/components/studio/ProductThumb";
+import { TrySampleRoom } from "@/components/shell/TrySampleRoom";
 
 /**
  * Pieces called out over the hero render. Positions are percentages of the
@@ -45,7 +46,7 @@ function SectionHeading({
       <div>
         <h2
           id={id}
-          className="font-[family-name:var(--font-display)] text-[clamp(32px,3.3vw,48px)] font-normal leading-[1.08] tracking-[-0.03em] text-chalk"
+          className="font-[family-name:var(--font-display)] text-[clamp(34px,3.8vw,54px)] font-bold leading-[0.98] tracking-[-0.04em] text-chalk"
         >
           {title}
         </h2>
@@ -76,7 +77,7 @@ export default function HomePage() {
             ratio, sized to cover the hero, so tags track the furniture. */}
         <div
           aria-hidden
-          className="absolute left-1/2 top-0 -z-20 aspect-[1920/1023] w-[max(100cqw,640px)] -translate-x-[58%] md:w-[max(100cqw,1320px)] md:left-0 md:top-1/2 md:-translate-y-1/2 md:translate-x-[14%]"
+          className="absolute left-1/2 top-0 -z-20 aspect-[1920/1023] w-[max(100cqw,640px)] -translate-x-[58%] md:w-[max(100cqw,1320px)] md:left-0 md:top-0 md:translate-x-[14%]"
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -98,7 +99,7 @@ export default function HomePage() {
         />
 
         {/* Product callouts, desktop only — on a phone they would sit under the copy */}
-        <div className="absolute left-0 top-1/2 hidden aspect-[1920/1023] w-[max(100cqw,1320px)] -translate-y-1/2 translate-x-[14%] lg:block">
+        <div className="absolute left-0 top-0 hidden aspect-[1920/1023] w-[max(100cqw,1320px)] translate-x-[14%] lg:block">
           {HERO_TAGS.map(({ id, x, y, side }) => {
             const p = PRODUCTS_BY_ID.get(id);
             if (!p) return null;
@@ -120,7 +121,7 @@ export default function HomePage() {
                 />
                 <Link
                   href={`/shop?q=${encodeURIComponent(p.name)}`}
-                  className={`group absolute left-[-12px] inline-flex items-center gap-2.5 whitespace-nowrap rounded-[12px] border border-white/20 bg-[rgba(35,35,31,0.86)] py-2 pl-2 pr-3 text-chalk shadow-[0_8px_24px_rgba(0,0,0,0.18)] backdrop-blur-[12px] transition-colors hover:border-white/35 ${
+                  className={`group absolute left-[-12px] inline-flex items-center gap-2.5 whitespace-nowrap rounded-[12px] border border-white/20 bg-[rgba(35,31,27,0.86)] py-2 pl-2 pr-3 text-chalk shadow-[0_8px_24px_rgba(0,0,0,0.18)] backdrop-blur-[12px] transition-colors hover:border-white/35 ${
                     side === "above" ? "bottom-[43px]" : "top-[43px]"
                   }`}
                 >
@@ -138,15 +139,11 @@ export default function HomePage() {
           })}
         </div>
 
-        <div className="relative w-full px-[22px] pb-[34px] pt-[260px] md:w-[min(640px,68%)] md:px-[clamp(28px,6.5vw,100px)] md:py-[clamp(42px,6vw,88px)] lg:w-[min(640px,56%)]">
-          <span className="eyebrow rounded-full border border-accent/35 px-3 py-1.5 text-[10.5px]">
-            Design · Visualize · Shop
-          </span>
-
-          <h1 className="mt-[22px] mb-5 max-w-[680px] font-[family-name:var(--font-display)] text-[clamp(44px,12vw,62px)] font-normal leading-[0.99] tracking-[-0.035em] text-chalk md:text-[clamp(48px,5.6vw,82px)]">
+        <div className="relative w-full px-[22px] pb-[34px] pt-[260px] md:w-[min(720px,72%)] md:px-[clamp(28px,5vw,80px)] md:py-[clamp(42px,6vw,88px)] lg:w-[min(840px,60%)]">
+          <h1 className="mb-5 max-w-[680px] font-[family-name:var(--font-display)] text-[clamp(46px,12.5vw,64px)] font-bold leading-[0.92] tracking-[-0.04em] text-chalk md:text-[clamp(48px,4.9vw,76px)]">
             Design your space
             <br />
-            before you buy it.
+            <span className="text-warm">before you buy it.</span>
           </h1>
 
           <p className="max-w-[510px] text-[clamp(15px,1.25vw,18px)] leading-[1.7] text-chalk-2">
@@ -160,9 +157,7 @@ export default function HomePage() {
               Upload your room
               <ArrowRight className="size-4 transition-transform duration-300 group-hover:translate-x-0.5" />
             </Link>
-            <Link href="/discover" className={buttonClasses("outline", "lg")}>
-              Explore aesthetics
-            </Link>
+            <TrySampleRoom />
           </div>
 
           <dl className="mt-[30px] flex flex-wrap gap-[18px] md:mt-11 md:gap-7">
@@ -203,36 +198,36 @@ export default function HomePage() {
             sub="See decor in your own room before you spend a rupee"
           />
 
-          <ol className="grid gap-4 md:grid-cols-3">
+          {/* A sequence, so the numbers carry meaning: read left to right, top to bottom on a phone */}
+          <ol className="grid border-t border-line md:grid-cols-3">
             {[
               {
-                icon: Camera,
                 title: "Upload a photo",
-                body: "Take one picture of your room. Nothing leaves your device unless you choose.",
+                body: "One picture of your room. Nothing leaves your device unless you choose.",
               },
               {
-                icon: Ruler,
                 title: "We rebuild it in 3D",
                 body: "RoomDraft works out the walls, floor and size, so everything you add is true to scale.",
               },
               {
-                icon: Sofa,
                 title: "Drop in decor",
-                body: "Place lamps, posters, plants and furniture. They sit on tables and hang on walls.",
+                body: "Lamps, posters, plants, furniture. They sit on tables and hang on walls.",
               },
-            ].map(({ icon: Icon, title, body }, i) => (
+            ].map(({ title, body }, i) => (
               <li
                 key={title}
-                className="rounded-[var(--radius-card)] border border-line bg-ink-2 p-6"
+                className="flex gap-5 border-b border-line py-7 md:border-b-0 md:border-l md:px-8 md:py-9 md:first:border-l-0 md:first:pl-0"
               >
-                <div className="mb-5 flex items-center justify-between">
-                  <span className="grid size-10 place-items-center rounded-[12px] border border-line text-warm">
-                    <Icon className="size-5" strokeWidth={1.7} />
-                  </span>
-                  <span className="eyebrow text-chalk-4">Step {i + 1}</span>
+                <span
+                  aria-hidden
+                  className="font-[family-name:var(--font-display)] text-[56px] font-bold leading-[0.8] tracking-[-0.04em] text-warm tabular-nums"
+                >
+                  {i + 1}
+                </span>
+                <div>
+                  <h3 className="text-[17px] font-semibold tracking-[-0.02em]">{title}</h3>
+                  <p className="mt-2 max-w-[38ch] text-[14px] leading-relaxed text-chalk-3">{body}</p>
                 </div>
-                <h3 className="text-[15px] font-semibold tracking-[-0.015em]">{title}</h3>
-                <p className="mt-1.5 text-[13px] leading-relaxed text-chalk-3">{body}</p>
               </li>
             ))}
           </ol>

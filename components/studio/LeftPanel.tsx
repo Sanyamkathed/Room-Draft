@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   ChevronLeft,
   Grip,
@@ -79,6 +80,23 @@ export function LeftPanel({ onTrace }: { onTrace?: () => void }) {
 
   const mine = useCustomProducts();
   const [builder, setBuilder] = React.useState<Product | "new" | null>(null);
+
+  // Arriving from the Pinterest feed with ?pin=<image>&title=: open the item
+  // maker already importing that Pin, then drop the params so a reload
+  // doesn't import it twice.
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const [pinImport, setPinImport] = React.useState<{ url: string; title: string } | null>(null);
+  React.useEffect(() => {
+    const pin = searchParams.get("pin");
+    if (!pin) return;
+    setPinImport({ url: pin, title: searchParams.get("title") ?? "" });
+    setBuilder("new");
+    router.replace(pathname, { scroll: false });
+    // Once, on arrival.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [category, setCategory] = React.useState<CategoryId | "all" | "for-you" | "mine">("all");
   const [query, setQuery] = React.useState("");
@@ -292,9 +310,15 @@ export function LeftPanel({ onTrace }: { onTrace?: () => void }) {
       {builder ? (
         <CustomItemDialog
           initial={builder === "new" ? undefined : builder}
-          onClose={() => setBuilder(null)}
+          initialLink={builder === "new" ? pinImport?.url : undefined}
+          initialName={builder === "new" ? pinImport?.title : undefined}
+          onClose={() => {
+            setBuilder(null);
+            setPinImport(null);
+          }}
           onSaved={(product, place) => {
             setBuilder(null);
+            setPinImport(null);
             setCategory("mine");
             if (place) quickAdd(product);
           }}

@@ -24,7 +24,7 @@ import { contactShadowTexture } from "@/lib/three/textures";
 import { useStudio } from "@/lib/store/studio";
 import { ProductModel } from "./models/ProductModel";
 
-const ACCENT = "#d8ff3c";
+const ACCENT = "#d4ab74";
 const BLOCKED = "#ff4d4d";
 /** Preview tint when the spot is valid. */
 const CAN_PLACE = "#3ddc84";

@@ -16,17 +16,18 @@
 
   /* Text — warm white, never pure */
   --color-chalk: #f4f0e8;
-  --color-chalk-2: #c0bdb4;
-  --color-chalk-3: #929188;
-  --color-chalk-4: #67665e;
+  --color-chalk-2: #c9c2b6;
+  --color-chalk-3: #9c9488;
+  --color-chalk-4: #6e675e;
 
-  /* The single accent */
-  --color-accent: #d5f45b;
-  --color-accent-hover: #e0ff70;
-  --color-accent-ink: #202217;
-  --color-accent-dim: #a8c240;
-  --color-danger: #ff6b6b;
-  --color-warm: #c6a16b;
+  /* Brown and white: the accent is a warm cream with brown text on it,
+     and a gold-brown carries highlights and icons */
+  --color-accent: #f1e6d2;
+  --color-accent-hover: #fffaf1;
+  --color-accent-ink: #241f1a;
+  --color-accent-dim: #cbb89a;
+  --color-danger: #ff8a7a;
+  --color-warm: #d4ab74;
 
   /* Hairlines tinted to the warm white */
   --color-line: rgb(236 232 219 / 0.13);
@@ -39,9 +40,9 @@
   --radius-pill: 999px;
 
   /* Type */
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system,
+  --font-sans: var(--font-quicksand), ui-sans-serif, system-ui, -apple-system,
     "Segoe UI", sans-serif;
-  --font-display: var(--font-display), ui-serif, Georgia, serif;
+  --font-display: var(--font-quicksand), ui-sans-serif, system-ui, sans-serif;
 
   /* Motion — one shared easing so the whole app feels like one object */
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
@@ -69,7 +70,8 @@
     background: var(--color-ink-0);
     color: var(--color-chalk);
     font-family: var(--font-sans);
-    font-feature-settings: "cv11", "ss01";
+    /* Quicksand's regular is hairline-thin on dark; 500 reads as body text */
+    font-weight: 500;
     font-variant-ligatures: contextual;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
@@ -101,7 +103,7 @@
   /* Thin, unobtrusive scrollbars — panels should read as surfaces, not lists */
   * {
     scrollbar-width: thin;
-    scrollbar-color: rgb(255 255 255 / 0.14) transparent;
+    scrollbar-color: rgb(212 171 116 / 0.35) transparent;
   }
   *::-webkit-scrollbar {
     width: 8px;
@@ -135,6 +137,11 @@
   input[type="range"]:active {
     cursor: grabbing;
   }
+  input,
+  textarea {
+    caret-color: var(--color-accent);
+  }
+
   input[type="range"]::-webkit-slider-runnable-track {
     height: 3px;
     border-radius: 999px;
@@ -193,21 +200,11 @@
 
   .text-display {
     font-family: var(--font-display);
-    font-weight: 400;
-    letter-spacing: -0.03em;
-    line-height: 0.99;
+    font-weight: 700;
+    letter-spacing: -0.035em;
+    line-height: 0.98;
   }
 
-  .eyebrow {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    color: var(--color-accent);
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.13em;
-    text-transform: uppercase;
-  }
 
   .no-scrollbar::-webkit-scrollbar {
     display: none;

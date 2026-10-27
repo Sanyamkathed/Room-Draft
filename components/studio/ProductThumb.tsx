@@ -294,9 +294,12 @@ function GlyphPaths({ glyph, a, b }: { glyph: Glyph; a: string; b: string }) {
 export function ProductThumb({
   product,
   className,
+  plain = false,
 }: {
   product: Product;
   className?: string;
+  /** Drop the tile's own dark backdrop and border, to sit on a surface the caller draws. */
+  plain?: boolean;
 }) {
   const glyph = GLYPH_FOR[product.model] ?? "flat";
   const [a, b = a] = product.palette;
@@ -307,11 +310,14 @@ export function ProductThumb({
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-[13px] border border-white/8",
+        "relative overflow-hidden rounded-[13px]",
+        !plain && "border border-white/8",
         className,
       )}
       style={{
-        background: glow
+        background: plain
+          ? undefined
+          : glow
           ? `radial-gradient(62% 58% at 50% 52%, ${glow}30 0%, transparent 72%), linear-gradient(158deg, #17171c 0%, #0c0c0f 100%)`
           : "linear-gradient(158deg, #17171c 0%, #0c0c0f 100%)",
       }}

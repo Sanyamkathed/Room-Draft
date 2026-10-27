@@ -1,18 +1,14 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, Instrument_Serif } from "next/font/google";
+import { Quicksand } from "next/font/google";
 import "./globals.css";
 import { AppShell } from "@/components/shell/AppShell";
 
-const inter = Inter({
+// The wordmark is drawn in a rounded geometric sans; Quicksand is the
+// closest open face, so the whole interface speaks in the logo's voice.
+const quicksand = Quicksand({
   subsets: ["latin"],
-  variable: "--font-inter",
-  display: "swap",
-});
-
-const display = Instrument_Serif({
-  subsets: ["latin"],
-  weight: "400",
-  variable: "--font-display",
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-quicksand",
   display: "swap",
 });
 
@@ -35,7 +31,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${inter.variable} ${display.variable}`}>
+    <html lang="en" className={quicksand.variable}>
       <body className="min-h-dvh bg-ink-0 antialiased">
         <AppShell>{children}</AppShell>
       </body>

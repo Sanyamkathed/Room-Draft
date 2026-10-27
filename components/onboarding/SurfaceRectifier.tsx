@@ -162,7 +162,7 @@ export function SurfaceRectifier({
             <polygon
               points={poly}
               fill="none"
-              stroke={mirrored ? "#ff6b6b" : "#d8ff3c"}
+              stroke={mirrored ? "#ff6b6b" : "#d4ab74"}
               strokeWidth="0.3"
               vectorEffect="non-scaling-stroke"
             />
