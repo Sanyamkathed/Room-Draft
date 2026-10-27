@@ -8,13 +8,41 @@ import { recommend } from "@/lib/assistant/scoring";
 import { formatDims, formatINR } from "@/lib/catalog/source";
 import { AESTHETICS, aestheticById, type AestheticId } from "@/lib/catalog/types";
 import { useProjects, usePreferences } from "@/lib/hooks/useProjects";
-import { MoodTile, PaletteDots } from "@/components/shell/MoodTile";
+import { PaletteDots } from "@/components/shell/MoodTile";
 import { AestheticCarousel } from "@/components/shell/AestheticCarousel";
 import { aestheticPhoto } from "@/lib/catalog/aestheticPhotos";
 import { ProductThumb } from "@/components/studio/ProductThumb";
 import { Button, Chip, buttonClasses } from "@/components/ui/primitives";
 import { storage } from "@/lib/storage/idb";
 import { cn } from "@/lib/utils/cn";
+
+/**
+ * The best match from each category first — a lamp, something for the wall,
+ * a surface piece, decor — then the next best overall, so a mood board reads
+ * as a whole room rather than six variations of one thing.
+ */
+function spread<T extends { category: string }>(ranked: T[], n: number): T[] {
+  const out: T[] = [];
+  const seen = new Set<string>();
+  for (const p of ranked) {
+    if (out.length === n) break;
+    if (!seen.has(p.category)) {
+      seen.add(p.category);
+      out.push(p);
+    }
+  }
+  for (const p of ranked) {
+    if (out.length === n) break;
+    if (!out.includes(p)) out.push(p);
+  }
+  return out;
+}
+
+/** Perceived lightness, to pick legible text on a palette swatch. */
+function isLight(hex: string): boolean {
+  const n = parseInt(hex.slice(1), 16);
+  return 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255) > 150;
+}
 
 function isAesthetic(v: string | null): v is AestheticId {
   return Boolean(v && AESTHETICS.some((a) => a.id === v));
@@ -64,7 +92,11 @@ function DiscoverContent() {
   /* ---------------- Theme detail ---------------- */
   if (active) {
     const a = aestheticById(active);
-    const picks = recommend({ aesthetics: [active] }, 12);
+    // The six strongest matches dress the mood board; the rest are listed below it.
+    const ranked = recommend({ aesthetics: [active] }, 24);
+    const board = spread(ranked, 6);
+    const rest = ranked.filter((p) => !board.includes(p)).slice(0, 12);
+    const picks = rest.length >= 4 ? rest : ranked.slice(0, 12);
     const isSaved = saved.includes(active);
 
     return (
@@ -143,21 +175,61 @@ function DiscoverContent() {
           </section>
         )}
 
-        {/* Mood board */}
+        {/* Mood board: the room that sets the style, its palette, and the pieces that make it */}
         <section className="mt-12">
           <h2 className="text-[17px] font-semibold tracking-[-0.025em]">Mood board</h2>
-          <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-            {[0, 1, 2, 3, 4, 5].map((i) => (
-              <MoodTile
-                key={i}
-                aesthetic={active}
-                seed={i * 7 + 2}
-                className={cn(
-                  "transition-transform duration-500 hover:scale-[1.02]",
-                  i === 0 || i === 3 ? "aspect-[3/4]" : "aspect-square",
-                )}
+          <p className="mt-1 text-[13px] text-chalk-3">
+            The pieces that make a {a.label.toLowerCase()} room, all available to drop into yours
+          </p>
+          <div className="mt-5 grid auto-rows-[150px] grid-cols-2 gap-3 md:auto-rows-[190px] md:grid-cols-4">
+            <figure className="relative col-span-2 row-span-2 overflow-hidden rounded-[var(--radius-card)] border border-line">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={aestheticPhoto(active, 900, 760)}
+                alt={`A ${a.label.toLowerCase()} room`}
+                className="absolute inset-0 size-full object-cover"
               />
+              <figcaption className="absolute inset-x-0 bottom-0 bg-[linear-gradient(to_top,rgba(28,24,20,0.9),transparent)] p-4 pt-12 text-[13px] font-medium text-chalk">
+                The look
+              </figcaption>
+            </figure>
+
+            {board.map((p, i) => (
+              <Link
+                key={p.id}
+                href={`/shop?q=${encodeURIComponent(p.name)}`}
+                className={cn(
+                  "group relative overflow-hidden rounded-[var(--radius-card)] border border-line transition-[border-color,transform] duration-300 hover:-translate-y-0.5 hover:border-line-strong",
+                  i === 0 && "md:row-span-2",
+                )}
+                style={{
+                  background: `radial-gradient(70% 60% at 50% 42%, ${a.swatch[i % 2 === 0 ? 1 : 2]}38 0%, transparent 72%), linear-gradient(160deg, ${a.swatch[0]} 0%, #1c1814 100%)`,
+                }}
+              >
+                <ProductThumb
+                  product={p}
+                  plain
+                  className="absolute inset-x-4 bottom-12 top-4 transition-transform duration-500 group-hover:scale-[1.04]"
+                />
+                <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-2 bg-[linear-gradient(to_top,rgba(28,24,20,0.92),transparent)] px-3.5 pb-3 pt-6">
+                  <span className="truncate text-[12.5px] font-semibold text-chalk">{p.name}</span>
+                  <span className="shrink-0 text-[11.5px] text-chalk-2">{formatINR(p.price)}</span>
+                </div>
+              </Link>
             ))}
+
+            <div className="flex flex-col overflow-hidden rounded-[var(--radius-card)] border border-line">
+              {a.swatch.map((c) => (
+                <div key={c} className="flex flex-1 items-end px-3.5 pb-2" style={{ background: c }}>
+                  <span
+                    className="font-mono text-[10.5px] uppercase tracking-wider"
+                    style={{ color: isLight(c) ? "#1c1814" : "#f4f0e8" }}
+                  >
+                    {c}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         </section>
 
