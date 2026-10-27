@@ -47,6 +47,10 @@ export function StudioShell() {
   const select = useStudio((s) => s.select);
   const leftOpen = useStudio((s) => s.leftPanelOpen);
   const setLeftOpen = useStudio((s) => s.setLeftPanel);
+  // A Pin sent from the inspo feed opens in the item maker, which lives in the left panel.
+  React.useEffect(() => {
+    if (new URLSearchParams(window.location.search).has("pin")) setLeftOpen(true);
+  }, [setLeftOpen]);
   const rightOpen = useStudio((s) => s.rightPanelOpen);
   const setRightOpen = useStudio((s) => s.setRightPanel);
   const sheetSize = useStudio((s) => s.sheetSize);

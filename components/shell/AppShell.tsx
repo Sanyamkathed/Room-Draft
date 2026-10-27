@@ -9,6 +9,7 @@ import {
   Heart,
   Home,
   LayoutGrid,
+  Pin,
   Search,
   ShoppingBag,
   User,
@@ -22,6 +23,7 @@ const HEADER_NAV = [
   { href: "/shop", label: "Explore" },
   { href: "/#how-it-works", label: "How it works" },
   { href: "/discover", label: "Aesthetics" },
+  { href: "/inspo", label: "Inspo" },
   { href: "/spaces", label: "My spaces" },
 ];
 
@@ -29,6 +31,7 @@ const HEADER_NAV = [
 const TAB_NAV = [
   { href: "/", label: "Home", icon: Home },
   { href: "/spaces", label: "My Spaces", icon: LayoutGrid },
+  { href: "/inspo", label: "Inspo", icon: Pin },
   { href: "/discover", label: "Discover", icon: Compass },
   { href: "/shop", label: "Shop", icon: ShoppingBag },
   { href: "/profile", label: "Profile", icon: User },

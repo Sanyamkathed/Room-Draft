@@ -5,6 +5,7 @@ import { Plus } from "lucide-react";
 import { useProjects } from "@/lib/hooks/useProjects";
 import { ProjectCard } from "@/components/shell/ProjectCard";
 import { EmptyState, Skeleton, buttonClasses } from "@/components/ui/primitives";
+import { TrySampleRoom } from "@/components/shell/TrySampleRoom";
 
 export default function SpacesPage() {
   const { projects, loading, remove } = useProjects();
@@ -23,10 +24,13 @@ export default function SpacesPage() {
           </p>
         </div>
 
-        <Link href="/onboarding" className={buttonClasses("primary", "md", "gap-2")}>
-          <Plus className="size-4" strokeWidth={2.4} />
-          New space
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <TrySampleRoom variant="outline" size="md" label="Sample room" />
+          <Link href="/onboarding" className={buttonClasses("primary", "md", "gap-2")}>
+            <Plus className="size-4" strokeWidth={2.4} />
+            New space
+          </Link>
+        </div>
       </header>
 
       {loading ? (
@@ -42,9 +46,12 @@ export default function SpacesPage() {
             title="No spaces yet"
             body="Upload one photo of your room and RoomDraft will rebuild it in 3D for you to design in."
             action={
-              <Link href="/onboarding" className={buttonClasses("primary", "md")}>
-                Upload your room
-              </Link>
+              <div className="flex flex-wrap justify-center gap-2">
+                <Link href="/onboarding" className={buttonClasses("primary", "md")}>
+                  Upload your room
+                </Link>
+                <TrySampleRoom variant="outline" size="md" />
+              </div>
             }
           />
         </div>

@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, Instrument_Serif } from "next/font/google";
+import { Bricolage_Grotesque, Inter } from "next/font/google";
 import "./globals.css";
 import { AppShell } from "@/components/shell/AppShell";
 
@@ -9,9 +9,9 @@ const inter = Inter({
   display: "swap",
 });
 
-const display = Instrument_Serif({
+const display = Bricolage_Grotesque({
   subsets: ["latin"],
-  weight: "400",
+  weight: ["600", "800"],
   variable: "--font-display",
   display: "swap",
 });
@@ -24,7 +24,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#1c1814",
+  themeColor: "#070606",
   width: "device-width",
   initialScale: 1,
   // The studio is a direct-manipulation surface; browser pinch-zoom would

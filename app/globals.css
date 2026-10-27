@@ -7,30 +7,30 @@
  * ------------------------------------------------------------------ */
 
 @theme {
-  /* Surfaces — charcoal warmed with brown, deep through to raised panels */
-  --color-ink-0: #241f1a;
-  --color-ink-1: #1c1814;
-  --color-ink-2: #2c2620;
-  --color-ink-3: #352e27;
-  --color-ink-4: #3c342b;
+  /* Surfaces — near-black with a trace of red, deep through to raised */
+  --color-ink-0: #0c0a0a;
+  --color-ink-1: #070606;
+  --color-ink-2: #151112;
+  --color-ink-3: #1e1819;
+  --color-ink-4: #282021;
 
-  /* Text — warm white, never pure */
-  --color-chalk: #f4f0e8;
-  --color-chalk-2: #c0bdb4;
-  --color-chalk-3: #929188;
-  --color-chalk-4: #67665e;
+  /* Text — white with a faint warm-red cast, never pure */
+  --color-chalk: #f8f1f0;
+  --color-chalk-2: #c9b9b7;
+  --color-chalk-3: #988684;
+  --color-chalk-4: #6a5a59;
 
-  /* The single accent */
-  --color-accent: #d5f45b;
-  --color-accent-hover: #e0ff70;
-  --color-accent-ink: #202217;
-  --color-accent-dim: #a8c240;
-  --color-danger: #ff6b6b;
-  --color-warm: #c6a16b;
+  /* One loud accent: signal red. Black text sits on it (5.7:1). */
+  --color-accent: #ff2d3a;
+  --color-accent-hover: #ff4a55;
+  --color-accent-ink: #0c0a0a;
+  --color-accent-dim: #b3141f;
+  --color-danger: #ff8a3d;
+  --color-warm: #ff5c64;
 
-  /* Hairlines tinted to the warm white */
-  --color-line: rgb(236 232 219 / 0.13);
-  --color-line-strong: rgb(236 232 219 / 0.22);
+  /* Hairlines tinted to the red-white */
+  --color-line: rgb(255 214 210 / 0.11);
+  --color-line-strong: rgb(255 214 210 / 0.2);
 
   /* Radii — generous, rounded-card language */
   --radius-card: 16px;
@@ -41,7 +41,7 @@
   /* Type */
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system,
     "Segoe UI", sans-serif;
-  --font-display: var(--font-display), ui-serif, Georgia, serif;
+  --font-display: var(--font-display), ui-sans-serif, system-ui, sans-serif;
 
   /* Motion — one shared easing so the whole app feels like one object */
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
@@ -101,7 +101,7 @@
   /* Thin, unobtrusive scrollbars — panels should read as surfaces, not lists */
   * {
     scrollbar-width: thin;
-    scrollbar-color: rgb(255 255 255 / 0.14) transparent;
+    scrollbar-color: rgb(255 45 58 / 0.35) transparent;
   }
   *::-webkit-scrollbar {
     width: 8px;
@@ -135,6 +135,11 @@
   input[type="range"]:active {
     cursor: grabbing;
   }
+  input,
+  textarea {
+    caret-color: var(--color-accent);
+  }
+
   input[type="range"]::-webkit-slider-runnable-track {
     height: 3px;
     border-radius: 999px;
@@ -193,21 +198,11 @@
 
   .text-display {
     font-family: var(--font-display);
-    font-weight: 400;
-    letter-spacing: -0.03em;
-    line-height: 0.99;
+    font-weight: 800;
+    letter-spacing: -0.04em;
+    line-height: 0.95;
   }
 
-  .eyebrow {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    color: var(--color-accent);
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.13em;
-    text-transform: uppercase;
-  }
 
   .no-scrollbar::-webkit-scrollbar {
     display: none;

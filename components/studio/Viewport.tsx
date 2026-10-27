@@ -388,7 +388,7 @@ function Guides() {
               <bufferAttribute attach="attributes-position" args={[points, 3]} />
             </bufferGeometry>
             <lineBasicMaterial
-              color="#d8ff3c"
+              color="#ff2d3a"
               transparent
               opacity={0.62}
               depthTest={false}

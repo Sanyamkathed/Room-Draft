@@ -83,7 +83,7 @@ export function Processing({
             className="absolute inset-x-0 h-24 animate-[scan_2.6s_cubic-bezier(0.65,0,0.35,1)_infinite]"
             style={{
               background:
-                "linear-gradient(to bottom, transparent, rgba(216,255,60,0.16) 45%, rgba(216,255,60,0.55) 50%, rgba(216,255,60,0.16) 55%, transparent)",
+                "linear-gradient(to bottom, transparent, rgba(255,45,58,0.16) 45%, rgba(255,45,58,0.55) 50%, rgba(255,45,58,0.16) 55%, transparent)",
             }}
           />
         </div>

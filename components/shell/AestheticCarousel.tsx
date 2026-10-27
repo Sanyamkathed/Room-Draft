@@ -3,10 +3,10 @@
 import Link from "next/link";
 import { ArrowRight, BookmarkCheck } from "lucide-react";
 import { AESTHETICS, type AestheticId } from "@/lib/catalog/types";
+import { aestheticPhoto } from "@/lib/catalog/aestheticPhotos";
 import CoverflowCarousel from "@/components/ui/coverflow-carousel";
-import { MoodTile } from "./MoodTile";
 
-/** Every aesthetic as a coverflow card; the centre card opens its theme page. */
+/** Every aesthetic as a coverflow card of a real room; the centre card opens its theme page. */
 export function AestheticCarousel({
   saved = [],
   autoplay = false,
@@ -23,27 +23,32 @@ export function AestheticCarousel({
       <Link
         href={`/discover?theme=${a.id}`}
         draggable={false}
-        className="group block h-full w-full"
+        className="group relative block h-full w-full overflow-hidden bg-ink-3"
       >
-        <MoodTile aesthetic={a.id} seed={i} className="h-full w-full rounded-none">
-          <div className="absolute inset-x-[18px] bottom-[18px] z-10">
-            <h3 className="text-[18px] font-semibold tracking-[-0.02em] text-[#fffaf1]">
-              {a.label}
-            </h3>
-            <p className="mt-[5px] text-[12px] leading-snug text-[rgba(255,250,241,0.74)]">
-              {a.blurb}
-            </p>
-            <span className="mt-3 inline-flex items-center gap-1.5 text-[12px] font-medium text-accent">
-              Explore this style
-              <ArrowRight className="size-3.5 transition-transform duration-300 group-hover:translate-x-0.5" />
-            </span>
-          </div>
-          {saved.includes(a.id) && (
-            <span className="absolute right-3 top-3 z-10 grid size-6 place-items-center rounded-full bg-accent text-accent-ink">
-              <BookmarkCheck className="size-3.5" strokeWidth={2.6} />
-            </span>
-          )}
-        </MoodTile>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={aestheticPhoto(a.id)}
+          alt={`A ${a.label.toLowerCase()} room`}
+          draggable={false}
+          loading={i < 4 ? "eager" : "lazy"}
+          className="absolute inset-0 size-full object-cover transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-[1.04]"
+        />
+        <div className="absolute inset-0 bg-[linear-gradient(to_top,rgba(7,6,6,0.94)_0%,rgba(7,6,6,0.55)_38%,transparent_70%)]" />
+        <div className="absolute inset-x-[18px] bottom-[18px]">
+          <h3 className="font-[family-name:var(--font-display)] text-[24px] font-extrabold leading-none tracking-[-0.03em] text-chalk">
+            {a.label}
+          </h3>
+          <p className="mt-2 text-[12.5px] leading-snug text-chalk-2">{a.blurb}</p>
+          <span className="mt-3 inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-accent">
+            Explore this style
+            <ArrowRight className="size-3.5 transition-transform duration-300 group-hover:translate-x-0.5" />
+          </span>
+        </div>
+        {saved.includes(a.id) && (
+          <span className="absolute right-3 top-3 grid size-7 place-items-center rounded-full bg-accent text-accent-ink">
+            <BookmarkCheck className="size-3.5" strokeWidth={2.6} />
+          </span>
+        )}
       </Link>
     ),
   }));
@@ -57,8 +62,8 @@ export function AestheticCarousel({
       showJumpList={showJumpList}
       spacing={230}
       rotation={42}
-      stageClassName="h-[360px] md:h-[420px]"
-      cardClassName="h-[320px] w-[230px] md:h-[380px] md:w-[290px]"
+      stageClassName="h-[380px] md:h-[440px]"
+      cardClassName="h-[340px] w-[240px] md:h-[400px] md:w-[300px]"
     />
   );
 }

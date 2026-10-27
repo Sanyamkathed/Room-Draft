@@ -10,6 +10,7 @@ import { AESTHETICS, aestheticById, type AestheticId } from "@/lib/catalog/types
 import { useProjects, usePreferences } from "@/lib/hooks/useProjects";
 import { MoodTile, PaletteDots } from "@/components/shell/MoodTile";
 import { AestheticCarousel } from "@/components/shell/AestheticCarousel";
+import { aestheticPhoto } from "@/lib/catalog/aestheticPhotos";
 import { ProductThumb } from "@/components/studio/ProductThumb";
 import { Button, Chip, buttonClasses } from "@/components/ui/primitives";
 import { storage } from "@/lib/storage/idb";
@@ -77,7 +78,13 @@ function DiscoverContent() {
         </Link>
 
         <section className="relative overflow-hidden rounded-[26px] border border-white/8">
-          <MoodTile aesthetic={active} seed={3} className="absolute inset-0 rounded-none" />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={aestheticPhoto(active, 1600, 700)}
+            alt={`A ${a.label.toLowerCase()} room`}
+            className="absolute inset-0 size-full object-cover"
+          />
+          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(7,6,6,0.92)_0%,rgba(7,6,6,0.6)_50%,rgba(7,6,6,0.15)_100%)]" />
           <div className="relative px-6 py-12 md:px-12 md:py-16">
             <h1 className="text-display text-[42px] leading-[0.95] md:text-[64px] text-white">
               {a.label}
