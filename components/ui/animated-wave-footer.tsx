@@ -73,7 +73,7 @@ export default function AnimatedWaveFooter({ className }: { className?: string }
   return (
     <footer
       className={cn(
-        "relative isolate overflow-hidden bg-[linear-gradient(to_bottom,var(--color-ink-0)_0%,#120708_45%,#2a0609_100%)] pt-24",
+        "relative isolate overflow-hidden bg-[linear-gradient(to_bottom,var(--color-ink-0)_0%,#2c241c_45%,#3a2d20_100%)] pt-24",
         className,
       )}
     >
@@ -86,8 +86,8 @@ export default function AnimatedWaveFooter({ className }: { className?: string }
             preserveAspectRatio="none"
             xmlns="http://www.w3.org/2000/svg"
           >
-            <path d={WAVE_BACK} fill="currentColor" className="text-accent/[0.07]" />
-            <path d={WAVE_FRONT} fill="currentColor" className="text-accent/[0.12]" />
+            <path d={WAVE_BACK} fill="currentColor" className="text-warm/[0.07]" />
+            <path d={WAVE_FRONT} fill="currentColor" className="text-warm/[0.11]" />
           </svg>
         </div>
       </div>
@@ -95,7 +95,7 @@ export default function AnimatedWaveFooter({ className }: { className?: string }
       <div className="relative mx-auto w-[min(calc(100%-32px),1440px)] md:w-[min(calc(100%-64px),1440px)]">
         <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-4">
           <div>
-            <h2 className="mb-4 font-[family-name:var(--font-display)] text-[30px] font-extrabold leading-none tracking-[-0.04em] text-chalk">
+            <h2 className="mb-4 font-[family-name:var(--font-display)] text-[30px] font-bold leading-none tracking-[-0.04em] text-chalk">
               Stay connected
             </h2>
             <p className="mb-4 text-[13px] leading-relaxed text-chalk-3">
@@ -159,8 +159,11 @@ export default function AnimatedWaveFooter({ className }: { className?: string }
 
         <div className="mt-14 flex flex-col items-center justify-between gap-4 border-t border-line py-8 md:flex-row">
           <Wordmark className="h-5 w-auto text-chalk-2" />
-          <p className="text-[12.5px] text-chalk-3">
-            © {new Date().getFullYear()} RoomDraft. All rights reserved.
+          <p className="flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-[12.5px] text-chalk-3">
+            <Link href="/privacy" className="transition-colors hover:text-chalk">
+              Privacy
+            </Link>
+            <span>© {new Date().getFullYear()} RoomDraft. All rights reserved.</span>
           </p>
         </div>
       </div>

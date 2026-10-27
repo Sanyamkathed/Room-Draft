@@ -68,7 +68,7 @@ function Inspo() {
       <header className="mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
         <div>
           <h1 className="text-display text-[clamp(44px,7vw,84px)]">
-            Inspo, <span className="text-accent">straight from Pinterest.</span>
+            Inspo, <span className="text-warm">straight from Pinterest.</span>
           </h1>
           <p className="mt-4 max-w-[58ch] text-[15px] leading-relaxed text-chalk-2">
             Your boards and saved Pins, in one feed. See something you love? Drop it
@@ -115,12 +115,15 @@ function Connect({ configured }: { configured: boolean }) {
   return (
     <section className="grid gap-8 border-t border-line py-12 md:grid-cols-[1.1fr_1fr] md:items-center md:py-16">
       <div>
-        <h2 className="font-[family-name:var(--font-display)] text-[clamp(28px,3.4vw,42px)] font-extrabold leading-[1] tracking-[-0.04em]">
+        <h2 className="font-[family-name:var(--font-display)] text-[clamp(28px,3.4vw,42px)] font-bold leading-[1] tracking-[-0.04em]">
           Connect your Pinterest
         </h2>
         <p className="mt-3 max-w-[48ch] text-[14.5px] leading-relaxed text-chalk-2">
           RoomDraft asks Pinterest for read-only access to your boards and Pins. It never
-          posts, pins or changes anything, and you can disconnect at any time.
+          posts, pins or changes anything, and you can disconnect at any time.{" "}
+          <Link href="/privacy" className="text-chalk underline underline-offset-4 decoration-warm hover:text-warm">
+            How we handle your data
+          </Link>
         </p>
         {configured ? (
           <a href="/api/pinterest/login" className={buttonClasses("primary", "lg", "mt-7 group")}>
@@ -129,10 +132,8 @@ function Connect({ configured }: { configured: boolean }) {
           </a>
         ) : (
           <p className="mt-7 max-w-[52ch] rounded-[12px] border border-line bg-ink-2 px-4 py-3 text-[13px] leading-relaxed text-chalk-3">
-            Connecting isn&apos;t switched on for this site yet: it needs a Pinterest app id and
-            secret (<code className="text-chalk-2">PINTEREST_APP_ID</code>,{" "}
-            <code className="text-chalk-2">PINTEREST_APP_SECRET</code>). Until then, paste any
-            Pin link below.
+            Connecting Pinterest is almost ready on RoomDraft. Until then, paste any Pin link
+            below and add it to a room.
           </p>
         )}
       </div>
@@ -143,7 +144,7 @@ function Connect({ configured }: { configured: boolean }) {
           "Add a Pin to a room. It becomes a real-size item you can place.",
         ].map((t, i) => (
           <li key={t} className="flex items-baseline gap-4">
-            <span className="font-[family-name:var(--font-display)] text-[28px] font-extrabold leading-none text-accent tabular-nums">
+            <span className="font-[family-name:var(--font-display)] text-[28px] font-bold leading-none text-warm tabular-nums">
               {i + 1}
             </span>
             {t}
@@ -297,7 +298,7 @@ function Feed({
                 style={{ backgroundColor: p.color ?? undefined }}
                 className="block h-auto w-full"
               />
-              <figcaption className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-2 bg-[linear-gradient(to_top,rgba(7,6,6,0.9),transparent)] p-2.5 pt-10 md:opacity-0 md:transition-opacity md:duration-200 md:group-hover:opacity-100 md:group-focus-within:opacity-100">
+              <figcaption className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-2 bg-[linear-gradient(to_top,rgba(28,24,20,0.9),transparent)] p-2.5 pt-10 md:opacity-0 md:transition-opacity md:duration-200 md:group-hover:opacity-100 md:group-focus-within:opacity-100">
                 <span className="line-clamp-2 text-[12px] leading-snug text-chalk">{p.title}</span>
                 <button
                   type="button"

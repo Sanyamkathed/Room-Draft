@@ -177,12 +177,12 @@ export function DimensionsStep({
               width={pw}
               height={pd}
               rx={2}
-              fill="rgba(255,45,58,0.06)"
-              stroke="#ff2d3a"
+              fill="rgba(212,171,116,0.06)"
+              stroke="#d4ab74"
               strokeWidth={1.5}
             />
             {/* Back wall marker — the one people usually shoot first */}
-            <rect x={40} y={36} width={pw} height={5} fill="#ff2d3a" opacity={0.8} />
+            <rect x={40} y={36} width={pw} height={5} fill="#d4ab74" opacity={0.8} />
             <text
               x={40 + pw / 2}
               y={30}

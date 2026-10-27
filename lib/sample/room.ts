@@ -82,7 +82,7 @@ export function buildSampleProject(): Project {
       wall: "#d6cec6",
       floor: "#6e4f3c",
       ceiling: "#ece7e3",
-      accent: "#ff2d3a",
+      accent: "#d4ab74",
     },
     items,
     aesthetic: null,

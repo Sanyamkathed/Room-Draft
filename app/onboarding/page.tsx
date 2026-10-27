@@ -400,7 +400,7 @@ export default function OnboardingPage() {
               >
                 <div
                   className="pointer-events-none absolute -right-16 -top-16 size-48 rounded-full blur-[60px] opacity-40"
-                  style={{ background: "rgba(255,45,58,0.35)" }}
+                  style={{ background: "rgba(212,171,116,0.35)" }}
                 />
                 <div className="relative">
                   <div className="flex items-center gap-2">

@@ -33,9 +33,9 @@ export function AestheticCarousel({
           loading={i < 4 ? "eager" : "lazy"}
           className="absolute inset-0 size-full object-cover transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-[1.04]"
         />
-        <div className="absolute inset-0 bg-[linear-gradient(to_top,rgba(7,6,6,0.94)_0%,rgba(7,6,6,0.55)_38%,transparent_70%)]" />
+        <div className="absolute inset-0 bg-[linear-gradient(to_top,rgba(28,24,20,0.94)_0%,rgba(28,24,20,0.55)_38%,transparent_70%)]" />
         <div className="absolute inset-x-[18px] bottom-[18px]">
-          <h3 className="font-[family-name:var(--font-display)] text-[24px] font-extrabold leading-none tracking-[-0.03em] text-chalk">
+          <h3 className="font-[family-name:var(--font-display)] text-[24px] font-bold leading-none tracking-[-0.03em] text-chalk">
             {a.label}
           </h3>
           <p className="mt-2 text-[12.5px] leading-snug text-chalk-2">{a.blurb}</p>

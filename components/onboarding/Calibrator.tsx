@@ -179,7 +179,7 @@ export function Calibrator({
                 y1={c.y * 100}
                 x2={(c.x + dx * k) * 100}
                 y2={(c.y + dy * k) * 100}
-                stroke="rgba(255,45,58,0.4)"
+                stroke="rgba(212,171,116,0.4)"
                 strokeWidth="0.22"
                 strokeDasharray="1.2 1"
                 vectorEffect="non-scaling-stroke"
@@ -193,7 +193,7 @@ export function Calibrator({
             width={(right - left) * 100}
             height={(bottom - top) * 100}
             fill="none"
-            stroke="#ff2d3a"
+            stroke="#d4ab74"
             strokeWidth="0.3"
             vectorEffect="non-scaling-stroke"
           />

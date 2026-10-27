@@ -84,7 +84,7 @@ function DiscoverContent() {
             alt={`A ${a.label.toLowerCase()} room`}
             className="absolute inset-0 size-full object-cover"
           />
-          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(7,6,6,0.92)_0%,rgba(7,6,6,0.6)_50%,rgba(7,6,6,0.15)_100%)]" />
+          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(28,24,20,0.92)_0%,rgba(28,24,20,0.6)_50%,rgba(28,24,20,0.15)_100%)]" />
           <div className="relative px-6 py-12 md:px-12 md:py-16">
             <h1 className="text-display text-[42px] leading-[0.95] md:text-[64px] text-white">
               {a.label}
