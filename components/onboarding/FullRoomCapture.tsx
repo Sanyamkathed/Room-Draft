@@ -345,7 +345,7 @@ export function SurfaceGrid({
               <button
                 onClick={() => onRemove(surface)}
                 aria-label={`Remove the ${SURFACE_LABELS[surface]} photo`}
-                className="absolute left-2 top-2 grid size-7 place-items-center rounded-[9px] bg-black/65 text-chalk-2 opacity-0 backdrop-blur transition-all hover:text-danger group-hover:opacity-100"
+                className="absolute left-2 top-2 grid size-8 place-items-center rounded-[9px] bg-black/65 text-chalk backdrop-blur transition-all hover:text-danger [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus-visible:opacity-100"
               >
                 <Trash2 className="size-3.5" />
               </button>

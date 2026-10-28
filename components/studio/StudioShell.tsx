@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Check,
@@ -13,6 +14,7 @@ import {
 } from "lucide-react";
 import { SHEET_HEIGHT, useStudio, type SheetSize } from "@/lib/store/studio";
 import { downloadDataUrl } from "@/lib/utils/image";
+import { storage } from "@/lib/storage/idb";
 import { Button, IconButton } from "@/components/ui/primitives";
 import { cn } from "@/lib/utils/cn";
 import { ArMode } from "./ArMode";
@@ -78,6 +80,19 @@ export function StudioShell() {
   const [saving, setSaving] = React.useState(false);
   const [justSaved, setJustSaved] = React.useState(false);
   const [confirmClear, setConfirmClear] = React.useState(false);
+  const router = useRouter();
+
+  /**
+   * Delete this whole space. The store is reset first so no pending autosave
+   * can write the room back after it's gone.
+   */
+  const deleteSpace = React.useCallback(async () => {
+    const id = useStudio.getState().project?.id;
+    if (!id) return;
+    useStudio.getState().reset();
+    await storage.deleteProject(id);
+    router.replace("/spaces");
+  }, [router]);
 
   const grabCanvas = React.useCallback((): string | undefined => {
     const canvas = document.querySelector<HTMLCanvasElement>("canvas[data-engine]");
@@ -208,9 +223,9 @@ export function StudioShell() {
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5">
-          {items.length > 0 &&
-            (confirmClear ? (
-              <div className="flex items-center gap-1 rounded-[10px] bg-danger/12 p-1">
+          {confirmClear ? (
+            <div className="flex items-center gap-1 rounded-[10px] bg-danger/12 p-1">
+              {items.length > 0 && (
                 <button
                   onClick={() => {
                     clearItems();
@@ -218,25 +233,32 @@ export function StudioShell() {
                   }}
                   className="rounded-[7px] px-2 py-1 text-[11.5px] font-semibold text-danger hover:bg-danger/15"
                 >
-                  Clear all
+                  Clear items
                 </button>
-                <button
-                  onClick={() => setConfirmClear(false)}
-                  className="rounded-[7px] px-2 py-1 text-[11.5px] text-chalk-2 hover:bg-white/8"
-                >
-                  Cancel
-                </button>
-              </div>
-            ) : (
-              <IconButton
-                label="Clear the room"
-                size="sm"
-                tone="danger"
-                onClick={() => setConfirmClear(true)}
+              )}
+              <button
+                onClick={() => void deleteSpace()}
+                className="rounded-[7px] px-2 py-1 text-[11.5px] font-semibold text-danger hover:bg-danger/15"
               >
-                <Trash2 className="size-4" />
-              </IconButton>
-            ))}
+                Delete space
+              </button>
+              <button
+                onClick={() => setConfirmClear(false)}
+                className="rounded-[7px] px-2 py-1 text-[11.5px] text-chalk-2 hover:bg-white/8"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <IconButton
+              label="Clear items or delete this space"
+              size="sm"
+              tone="danger"
+              onClick={() => setConfirmClear(true)}
+            >
+              <Trash2 className="size-4" />
+            </IconButton>
+          )}
 
           <IconButton label="Export a PNG" size="sm" onClick={exportPng}>
             <Download className="size-4" />

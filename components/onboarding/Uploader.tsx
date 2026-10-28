@@ -65,6 +65,16 @@ export function Uploader({
     [shots, onChange, primaryId, onPrimary],
   );
 
+  // Removing the 3D source hands the role to the next photo; removing the
+  // last photo clears it, so the next upload becomes the source again.
+  const remove = (id: string) => {
+    const next = shots.filter((x) => x.id !== id);
+    onChange(next);
+    if (id === primaryId) onPrimary(next[0]?.id ?? "");
+    if (fileInput.current) fileInput.current.value = "";
+    if (cameraInput.current) cameraInput.current.value = "";
+  };
+
   return (
     <div className="space-y-4">
       <div
@@ -150,6 +160,9 @@ export function Uploader({
             {shots.length === 1
               ? "Your space"
               : "Tap the shot to build your 3D room from"}
+            <span className="ml-2 normal-case tracking-normal font-medium text-chalk-4">
+              Wrong photo? Tap the × to remove it.
+            </span>
           </p>
           <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-4">
             {shots.map((s) => {
@@ -178,18 +191,15 @@ export function Uploader({
                     aria-label={`Remove ${s.name}`}
                     onClick={(e) => {
                       e.stopPropagation();
-                      const next = shots.filter((x) => x.id !== s.id);
-                      onChange(next);
-                      if (isPrimary && next.length) onPrimary(next[0].id);
+                      remove(s.id);
                     }}
                     onKeyDown={(e) => {
                       if (e.key !== "Enter" && e.key !== " ") return;
+                      e.preventDefault();
                       e.stopPropagation();
-                      const next = shots.filter((x) => x.id !== s.id);
-                      onChange(next);
-                      if (isPrimary && next.length) onPrimary(next[0].id);
+                      remove(s.id);
                     }}
-                    className="absolute right-1.5 top-1.5 grid size-6 cursor-pointer place-items-center rounded-full bg-black/70 text-chalk-2 opacity-0 backdrop-blur transition-all hover:text-danger group-hover:opacity-100"
+                    className="absolute right-1.5 top-1.5 grid size-7 cursor-pointer place-items-center rounded-full bg-black/70 text-chalk backdrop-blur transition-all hover:text-danger [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus-visible:opacity-100"
                   >
                     <X className="size-3.5" />
                   </span>
