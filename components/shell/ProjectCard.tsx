@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { MoreHorizontal, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import type { ProjectSummary } from "@/lib/storage/types";
 import { cn } from "@/lib/utils/cn";
 import { MoodTile } from "./MoodTile";
@@ -68,9 +68,9 @@ export function ProjectCard({
             <div className="flex items-center gap-1 rounded-[10px] glass-strong p-1 edge-light">
               <button
                 onClick={() => void onDelete(project.id)}
-                className="rounded-[7px] px-2 py-1 text-[11.5px] font-semibold text-danger transition-colors hover:bg-danger/15"
+                className="rounded-[7px] px-2.5 py-1.5 text-[12px] font-semibold text-danger transition-colors hover:bg-danger/15"
               >
-                Delete
+                Delete space
               </button>
               <button
                 onClick={() => setConfirming(false)}
@@ -83,9 +83,11 @@ export function ProjectCard({
             <button
               onClick={() => setConfirming(true)}
               aria-label={`Delete ${project.name}`}
-              className="grid size-8 place-items-center rounded-[9px] glass-strong text-chalk-2 opacity-0 transition-all duration-250 hover:text-danger focus-visible:opacity-100 group-hover:opacity-100"
+              title="Delete this space"
+              // Always shown on touch screens, which have no hover to reveal it.
+              className="grid size-9 place-items-center rounded-[10px] glass-strong text-chalk-2 transition-all duration-250 hover:text-danger [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus-visible:opacity-100"
             >
-              <MoreHorizontal className="size-4" />
+              <Trash2 className="size-4" />
             </button>
           )}
         </div>
@@ -97,7 +99,7 @@ export function ProjectCard({
 export function DeleteHint() {
   return (
     <span className="inline-flex items-center gap-1 text-[11.5px] text-chalk-4">
-      <Trash2 className="size-3" /> Hover a card to manage it
+      <Trash2 className="size-3" /> Use the bin on a card to delete it
     </span>
   );
 }

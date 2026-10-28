@@ -27,6 +27,17 @@ export default function PrivacyPage() {
         that means, and the few times something does leave your device.
       </p>
 
+      <Section title="Who we are">
+        <p>
+          RoomDraft is a 3D room planner at{" "}
+          <a href="https://www.roomdraft.co" className="font-semibold text-chalk underline underline-offset-4 decoration-warm hover:text-warm">
+            www.roomdraft.co
+          </a>
+          . This policy covers the website and the RoomDraft app it serves. For anything about
+          your data, write to {CONTACT}.
+        </p>
+      </Section>
+
       <Section title="What stays on your device">
         <p>
           Your rooms, room photos, the items you make and your saved styles are stored in
@@ -58,21 +69,40 @@ export default function PrivacyPage() {
 
       <Section title="Pinterest">
         <p>
-          Connecting Pinterest is optional. If you connect, Pinterest asks you to approve
-          read-only access to your boards and Pins. RoomDraft uses that access only to show your
-          boards and Pins in the Inspo feed and to let you search them. It never creates, edits,
-          deletes or posts anything on Pinterest.
+          Connecting Pinterest is optional. When you choose &ldquo;Connect Pinterest&rdquo;, you
+          are sent to Pinterest to sign in and approve access. RoomDraft asks only for two
+          read-only permissions:
+        </p>
+        <ul>
+          <li>
+            <strong>boards:read</strong>: to list your boards, so you can pick one in the Inspo feed.
+          </li>
+          <li>
+            <strong>pins:read</strong>: to show the Pins on your boards and let you search them.
+          </li>
+        </ul>
+        <p>
+          That is all the access is used for. RoomDraft never creates, edits, deletes or posts
+          anything on Pinterest, never asks for your Pinterest password, and doesn&apos;t read your
+          profile, followers or analytics.
         </p>
         <p>
-          The access key Pinterest gives us is kept in a secure cookie in your browser, and is
-          sent only to Pinterest when you load the feed. We don&apos;t store your Pins or your
-          Pinterest details on our servers. When you add a Pin to a room, its picture is saved
-          with that room on your device, like any other item you make.
+          <strong>What we keep.</strong> Pinterest gives us an access key, which we keep in a secure,
+          http-only cookie in your browser. It expires on Pinterest&apos;s schedule (about 30 days,
+          renewable for up to 60) and is deleted when you disconnect. Our server uses it only to
+          fetch your boards and Pins from Pinterest when you open the feed, and passes the result
+          straight to your browser. We don&apos;t save your Pins, boards or Pinterest account
+          details on our servers, and we don&apos;t share them with anyone.
         </p>
         <p>
-          You can disconnect at any time with &ldquo;Disconnect Pinterest&rdquo; on the Inspo
-          page, and you can also remove RoomDraft from the apps connected to your Pinterest
-          account in Pinterest&apos;s settings.
+          <strong>Adding a Pin to a room.</strong> When you add a Pin to one of your rooms, its
+          picture is saved with that room in your browser, like any other item you make. It
+          stays on your device.
+        </p>
+        <p>
+          <strong>Disconnecting.</strong> Use &ldquo;Disconnect Pinterest&rdquo; on the Inspo page,
+          or remove RoomDraft from the connected apps in your Pinterest settings. Either one ends
+          our access straight away.
         </p>
       </Section>
 
@@ -85,6 +115,29 @@ export default function PrivacyPage() {
             we&apos;ll say so here first.
           </li>
         </ul>
+      </Section>
+
+      <Section title="How long things are kept">
+        <ul>
+          <li>Rooms and items: on your device until you delete them or clear the site&apos;s data.</li>
+          <li>Pinterest access key: until it expires or you disconnect, whichever comes first.</li>
+          <li>
+            Our hosting provider (Vercel) keeps standard technical request logs, such as IP address
+            and the page asked for, for a short time to run and secure the site. They don&apos;t
+            contain your photos or Pinterest data.
+          </li>
+        </ul>
+      </Section>
+
+      <Section title="Children">
+        <p>RoomDraft is not meant for children under 13, and we don&apos;t knowingly collect their data.</p>
+      </Section>
+
+      <Section title="Changes to this policy">
+        <p>
+          If what RoomDraft does with data changes, we&apos;ll update this page and the date at the
+          top before the change goes live.
+        </p>
       </Section>
 
       <Section title="Questions or deletion requests">

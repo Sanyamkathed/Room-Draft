@@ -14,7 +14,8 @@ import { cookies } from "next/headers";
 
 const API = "https://api.pinterest.com/v5";
 export const AUTHORIZE_URL = "https://www.pinterest.com/oauth/";
-export const SCOPES = ["boards:read", "pins:read", "user_accounts:read"];
+// Only what the feed reads. Asking for more (e.g. user_accounts:read) makes app review harder.
+export const SCOPES = ["boards:read", "pins:read"];
 
 export const TOKEN_COOKIE = "rd_pin_token";
 export const REFRESH_COOKIE = "rd_pin_refresh";
