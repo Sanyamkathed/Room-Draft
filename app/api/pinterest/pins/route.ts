@@ -38,7 +38,9 @@ async function searchOwnPins(cfg: PinterestConfig, q: string): Promise<RawPin[]>
  * GET /api/pinterest/pins?board=&q=&bookmark=
  *
  *   board — Pins on one of the person's boards
- *   q     — search: all of Pinterest when the app has the beta, else their own Pins
+ *   q     — search; mode=mine (default) searches the person's own Pins,
+ *           mode=all searches all of Pinterest when the app has the partner
+ *           beta, else answers { available: false }
  *   none  — every Pin the person has saved
  *
  * Responds { pins, bookmark, scope } where scope says what was searched, so
@@ -52,6 +54,7 @@ export async function GET(req: NextRequest) {
   const board = sp.get("board")?.trim();
   const q = sp.get("q")?.trim().slice(0, 80);
   const bookmark = sp.get("bookmark") ?? undefined;
+  const mode = sp.get("mode") === "all" ? "all" : "mine";
 
   if (board && !/^[0-9A-Za-z_-]{1,64}$/.test(board)) {
     return NextResponse.json({ error: "That board id isn't valid." }, { status: 400 });
@@ -64,9 +67,10 @@ export async function GET(req: NextRequest) {
     if (board) {
       data = await pinterestGet(cfg, `/boards/${board}/pins`, { page_size: PAGE, bookmark });
       scope = "board";
-    } else if (q) {
+    } else if (q && mode === "all") {
+      // All of Pinterest needs the partner search, a closed beta. Without it
+      // the page offers a search on Pinterest itself instead.
       try {
-        // All of Pinterest, if this app has the (closed beta) partner search.
         data = await pinterestGet(
           cfg,
           "/search/partner/pins",
@@ -76,10 +80,12 @@ export async function GET(req: NextRequest) {
         scope = "pinterest";
       } catch (e) {
         if (e instanceof PinterestError && e.status === 401) throw e;
-        // Otherwise search the person's own Pins ourselves. Pinterest's own
-        // "search my Pins" needs the secret-board scopes, which we don't ask for.
-        data = { items: await searchOwnPins(cfg, q), bookmark: null };
+        return NextResponse.json({ pins: [], bookmark: null, scope: "pinterest", available: false });
       }
+    } else if (q) {
+      // The person's own Pins. Pinterest's "search my Pins" needs the
+      // secret-board scopes, which we don't ask for, so we search them here.
+      data = { items: await searchOwnPins(cfg, q), bookmark: null };
     } else {
       data = await pinterestGet(cfg, "/pins", { page_size: PAGE, bookmark });
     }

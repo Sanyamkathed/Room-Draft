@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowRight, Link2, LogOut, Plus, Search, X } from "lucide-react";
+import { ArrowRight, ExternalLink, Link2, LogOut, Plus, Search, X } from "lucide-react";
 import { useProjects } from "@/lib/hooks/useProjects";
 import { buildSampleProject } from "@/lib/sample/room";
 import { storage } from "@/lib/storage/idb";
@@ -168,6 +168,10 @@ function Feed({
   const [board, setBoard] = React.useState<string | null>(null);
   const [query, setQuery] = React.useState("");
   const [submitted, setSubmitted] = React.useState("");
+  // Where a search looks: the person's own Pins, or all of Pinterest.
+  const [mode, setMode] = React.useState<"mine" | "all">("mine");
+  // All of Pinterest is a closed-beta API; false once Pinterest says no.
+  const [allAvailable, setAllAvailable] = React.useState(true);
   const [pins, setPins] = React.useState<FeedPin[]>([]);
   const [bookmark, setBookmark] = React.useState<string | null>(null);
   const [scope, setScope] = React.useState<Scope>("yours");
@@ -187,11 +191,20 @@ function Feed({
       setError(null);
       const qs = new URLSearchParams();
       if (board) qs.set("board", board);
-      else if (submitted) qs.set("q", submitted);
+      else if (submitted) {
+        qs.set("q", submitted);
+        qs.set("mode", mode);
+      }
       if (more) qs.set("bookmark", more);
       try {
         const res = await fetch(`/api/pinterest/pins?${qs}`);
-        const data = (await res.json()) as { pins?: FeedPin[]; bookmark?: string | null; scope?: Scope; error?: string };
+        const data = (await res.json()) as {
+          pins?: FeedPin[];
+          bookmark?: string | null;
+          scope?: Scope;
+          error?: string;
+          available?: boolean;
+        };
         if (res.status === 401) {
           onExpired();
           return;
@@ -200,13 +213,14 @@ function Feed({
         setPins((prev) => (more ? [...prev, ...(data.pins ?? [])] : data.pins ?? []));
         setBookmark(data.bookmark ?? null);
         setScope(data.scope ?? "yours");
+        if (submitted && mode === "all") setAllAvailable(data.available !== false);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Couldn't load Pins.");
       } finally {
         setLoading(false);
       }
     },
-    [board, submitted, onExpired],
+    [board, submitted, mode, onExpired],
   );
 
   React.useEffect(() => {
@@ -239,11 +253,44 @@ function Feed({
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search your Pins: dark academia desk, neon bedroom…"
-            aria-label="Search your Pins"
+            placeholder={
+              mode === "all"
+                ? "Search all of Pinterest: boho bedroom, gaming desk…"
+                : "Search your Pins: dark academia desk, neon bedroom…"
+            }
+            aria-label={mode === "all" ? "Search all of Pinterest" : "Search your Pins"}
             className="h-11 w-full rounded-[12px] border border-line bg-ink-2 pl-10 pr-3 text-[14px] text-chalk outline-none placeholder:text-chalk-3 focus:border-accent"
           />
         </form>
+        <div role="radiogroup" aria-label="Search in" className="mb-3 inline-flex rounded-full border border-line bg-ink-2 p-1">
+          {(
+            [
+              { id: "mine", label: "My Pins" },
+              { id: "all", label: "All of Pinterest" },
+            ] as const
+          ).map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              role="radio"
+              aria-checked={mode === m.id}
+              onClick={() => {
+                setMode(m.id);
+                // Re-run the current search in the new place.
+                if (query.trim()) {
+                  setBoard(null);
+                  setSubmitted(query.trim());
+                }
+              }}
+              className={cn(
+                "h-8 rounded-full px-3.5 text-[12.5px] font-semibold transition-colors",
+                mode === m.id ? "bg-accent text-accent-ink" : "text-chalk-2 hover:text-chalk",
+              )}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
         <div className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1">
           {[{ id: null as string | null, name: "All Pins" }, ...boards].map((b) => {
             const active = board === b.id && !(b.id === null && submitted);
@@ -273,7 +320,28 @@ function Feed({
 
       <p className="mb-4 text-[13px] text-chalk-3">{label}</p>
 
-      {error ? (
+      {submitted && mode === "all" && !allAvailable && !loading ? (
+        <div className="rounded-[16px] border border-line bg-ink-2 px-5 py-7 text-center">
+          <p className="text-[15px] font-semibold text-chalk">Search “{submitted}” on Pinterest</p>
+          <p className="mx-auto mt-2 max-w-[52ch] text-[13.5px] leading-relaxed text-chalk-3">
+            Pinterest only lets approved partner apps show its full search inside them, so this
+            one opens on Pinterest. Find a Pin you love, copy its link, and paste it into{" "}
+            <a href="#pin-link" className="font-semibold text-chalk underline underline-offset-4 decoration-warm">
+              Got a Pin link already?
+            </a>{" "}
+            below to add it to a room.
+          </p>
+          <a
+            href={`https://www.pinterest.com/search/pins/?q=${encodeURIComponent(submitted)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={buttonClasses("primary", "md", "mt-5")}
+          >
+            Search on Pinterest
+            <ExternalLink className="size-4" />
+          </a>
+        </div>
+      ) : error ? (
         <p className="rounded-[12px] border border-line bg-ink-2 px-4 py-6 text-center text-[14px] text-chalk-2">
           {error}{" "}
           <button onClick={() => void load(null)} className="font-semibold text-accent hover:text-accent-hover">
@@ -336,7 +404,7 @@ function PasteLink({ onAdd }: { onAdd: (pin: { image: string; title: string }) =
   const [link, setLink] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
   return (
-    <section className="mt-14 border-t border-line pt-10">
+    <section id="pin-link" className="mt-14 scroll-mt-28 border-t border-line pt-10">
       <h2 className="text-[19px] font-semibold tracking-[-0.02em]">Got a Pin link already?</h2>
       <p className="mt-1.5 text-[13.5px] text-chalk-3">
         Paste any Pinterest Pin, shop listing or image link and add it to a room.
