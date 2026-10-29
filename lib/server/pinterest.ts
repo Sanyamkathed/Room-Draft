@@ -163,13 +163,21 @@ export async function pinterestGet<T>(
     // Pinterest explains itself in the body ({ code, message }); keep it in the server log.
     const body = await res.text().catch(() => "");
     console.error(`Pinterest ${path} ${res.status}: ${body.slice(0, 300)}`);
-    let said = "";
+    let j: { code?: number; message?: string } = {};
     try {
-      const j = JSON.parse(body) as { code?: number; message?: string };
-      if (j.message) said = ` (Pinterest ${res.status}${j.code ? `/${j.code}` : ""}: ${j.message.slice(0, 160)})`;
-    } catch {
-      said = ` (Pinterest ${res.status})`;
+      j = JSON.parse(body);
+    } catch {}
+    // 6410: the app isn't approved to read accounts other than its owner's
+    // (Pinterest's Trial access). Only Standard access lifts it.
+    if (j.code === 6410) {
+      throw new PinterestError(
+        403,
+        "Pinterest is still reviewing RoomDraft, so your Pins can't load here yet. Paste a Pin link below to add it to a room.",
+      );
     }
+    const said = j.message
+      ? ` (Pinterest ${res.status}${j.code ? `/${j.code}` : ""}: ${j.message.slice(0, 160)})`
+      : ` (Pinterest ${res.status})`;
     if (res.status === 429) {
       throw new PinterestError(429, `Pinterest is busy right now. Try again in a minute.${said}`);
     }
