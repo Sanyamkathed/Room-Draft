@@ -4,6 +4,7 @@ import {
   pinterestConfig,
   pinterestGet,
   toFeedPin,
+  type PinterestConfig,
   type FeedPin,
   type Paged,
   type RawPin,
@@ -13,6 +14,25 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const PAGE = "50";
+/** How many of the person's Pins a search looks through. */
+const SEARCH_PAGES = 4;
+
+/** Every word of the query appears in the Pin's title, description or alt text. */
+async function searchOwnPins(cfg: PinterestConfig, q: string): Promise<RawPin[]> {
+  const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+  const found: RawPin[] = [];
+  let bookmark: string | undefined;
+  for (let page = 0; page < SEARCH_PAGES; page++) {
+    const data = await pinterestGet<Paged<RawPin>>(cfg, "/pins", { page_size: "100", bookmark });
+    for (const pin of data.items) {
+      const hay = [pin.title, pin.description, pin.alt_text].filter(Boolean).join(" ").toLowerCase();
+      if (words.every((w) => hay.includes(w))) found.push(pin);
+    }
+    if (!data.bookmark) break;
+    bookmark = data.bookmark;
+  }
+  return found;
+}
 
 /**
  * GET /api/pinterest/pins?board=&q=&bookmark=
@@ -46,17 +66,19 @@ export async function GET(req: NextRequest) {
       scope = "board";
     } else if (q) {
       try {
-        data = await pinterestGet(cfg, "/search/partner/pins", {
-          term: q,
-          country_code: "IN",
-          locale: "en-IN",
-          bookmark,
-        });
+        // All of Pinterest, if this app has the (closed beta) partner search.
+        data = await pinterestGet(
+          cfg,
+          "/search/partner/pins",
+          { term: q, country_code: "IN", locale: "en-IN", bookmark },
+          { optional: true },
+        );
         scope = "pinterest";
       } catch (e) {
-        // The all-of-Pinterest search is a closed beta; most apps get 403.
-        if (!(e instanceof PinterestError) || e.status === 401) throw e;
-        data = await pinterestGet(cfg, "/search/pins", { query: q, bookmark });
+        if (e instanceof PinterestError && e.status === 401) throw e;
+        // Otherwise search the person's own Pins ourselves. Pinterest's own
+        // "search my Pins" needs the secret-board scopes, which we don't ask for.
+        data = { items: await searchOwnPins(cfg, q), bookmark: null };
       }
     } else {
       data = await pinterestGet(cfg, "/pins", { page_size: PAGE, bookmark });

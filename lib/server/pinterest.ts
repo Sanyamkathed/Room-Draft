@@ -130,7 +130,20 @@ export class PinterestError extends Error {
   }
 }
 
-export async function pinterestGet<T>(cfg: PinterestConfig, path: string, params: Record<string, string | undefined> = {}): Promise<T> {
+/**
+ * Call the API as the connected person.
+ *
+ * `optional` is for endpoints the app may simply not be allowed to use (the
+ * all-of-Pinterest search is a closed beta). Pinterest answers those with 401
+ * too, so for them a 401 means "not for this app", not "your login expired" —
+ * and must not throw the person's connection away.
+ */
+export async function pinterestGet<T>(
+  cfg: PinterestConfig,
+  path: string,
+  params: Record<string, string | undefined> = {},
+  { optional = false }: { optional?: boolean } = {},
+): Promise<T> {
   const token = await accessToken(cfg);
   if (!token) throw new PinterestError(401, "Connect your Pinterest account first.");
   const url = new URL(`${API}${path}`);
@@ -139,6 +152,9 @@ export async function pinterestGet<T>(cfg: PinterestConfig, path: string, params
     headers: { Authorization: `Bearer ${token}` },
     cache: "no-store",
   });
+  if (res.status === 401 && optional) {
+    throw new PinterestError(403, "This app can't use that Pinterest feature.");
+  }
   if (res.status === 401) {
     await clearTokens();
     throw new PinterestError(401, "Your Pinterest connection expired. Connect again.");
@@ -155,6 +171,7 @@ export interface RawPin {
   id: string;
   title?: string | null;
   description?: string | null;
+  alt_text?: string | null;
   link?: string | null;
   dominant_color?: string | null;
   media?: {
