@@ -11,6 +11,7 @@ import { useProjects, usePreferences } from "@/lib/hooks/useProjects";
 import { AestheticCarousel } from "@/components/shell/AestheticCarousel";
 import { aestheticPhoto } from "@/lib/catalog/aestheticPhotos";
 import { ProductThumb } from "@/components/studio/ProductThumb";
+import { GlareCard } from "@/components/ui/glare-cards";
 import { Button, Chip, buttonClasses } from "@/components/ui/primitives";
 import { storage } from "@/lib/storage/idb";
 import { cn } from "@/lib/utils/cn";
@@ -244,10 +245,7 @@ function DiscoverContent() {
             {picks.map((p) => {
               const liked = prefs.savedProductIds.includes(p.id);
               return (
-                <div
-                  key={p.id}
-                  className="group rounded-[var(--radius-card)] border border-white/8 bg-ink-1 p-3 transition-all duration-300 hover:border-white/18"
-                >
+                <GlareCard key={p.id} className="p-3">
                   <ProductThumb product={p} className="aspect-square w-full" />
                   <p className="mt-2.5 truncate text-[13px] font-medium">{p.name}</p>
                   <p className="text-[11.5px] text-chalk-4">{p.brand}</p>
@@ -275,7 +273,7 @@ function DiscoverContent() {
                       )}
                     </button>
                   </div>
-                </div>
+                </GlareCard>
               );
             })}
           </div>

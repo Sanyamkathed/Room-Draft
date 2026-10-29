@@ -27,6 +27,7 @@ import {
 } from "@/lib/catalog/types";
 import { usePreferences, useProjects } from "@/lib/hooks/useProjects";
 import { ProductThumb } from "@/components/studio/ProductThumb";
+import { GlareCard } from "@/components/ui/glare-cards";
 import { Badge, Chip, EmptyState, buttonClasses } from "@/components/ui/primitives";
 import { cn } from "@/lib/utils/cn";
 
@@ -245,10 +246,8 @@ function ShopContent() {
           {results.map((p) => {
             const liked = prefs.savedProductIds.includes(p.id);
             return (
-              <article
-                key={p.id}
-                className="group flex min-w-0 flex-col rounded-[var(--radius-card)] border border-white/8 bg-ink-1 p-2.5 transition-all duration-300 hover:border-white/18 md:p-3"
-              >
+              <GlareCard key={p.id} className="flex min-w-0 flex-col">
+              <article className="flex h-full min-w-0 flex-col p-2.5 md:p-3">
                 <button
                   onClick={() => setDetail(p)}
                   className="text-left"
@@ -292,6 +291,7 @@ function ShopContent() {
                   </button>
                 </div>
               </article>
+              </GlareCard>
             );
           })}
         </div>
