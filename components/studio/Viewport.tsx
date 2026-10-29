@@ -433,7 +433,7 @@ function EditTag() {
   const position: Vec3 = [(box.min[0] + box.max[0]) / 2, box.max[1] + 0.1, (box.min[2] + box.max[2]) / 2];
 
   return (
-    <Html position={position} transform sprite distanceFactor={6} zIndexRange={[20, 0]}>
+    <Html position={position} transform sprite distanceFactor={4} zIndexRange={[20, 0]}>
       <button
         type="button"
         aria-label={`Edit ${product.name}`}
@@ -447,7 +447,7 @@ function EditTag() {
         className="flex -translate-y-1/2 flex-col items-center"
       >
         <span
-          className="flex items-center gap-1.5 rounded-full border border-white/40 px-3.5 py-1.5 text-[13px] font-bold text-[#241f1a]"
+          className="flex items-center gap-1 rounded-full border border-white/40 px-2.5 py-1 text-[12px] font-bold text-[#241f1a]"
           style={{
             // Lit from above with a thick underside, so it reads as a solid tag in the room.
             background: "linear-gradient(180deg, #fffaf1 0%, #f1e6d2 55%, #d9c6a6 100%)",
@@ -455,7 +455,7 @@ function EditTag() {
               "0 1px 0 rgba(255,255,255,0.9) inset, 0 -2px 0 rgba(120,92,56,0.35) inset, 0 3px 0 #b89c74, 0 8px 18px rgba(0,0,0,0.45)",
           }}
         >
-          <svg viewBox="0 0 24 24" className="size-3.5" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <svg viewBox="0 0 24 24" className="size-3" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
             <path d="M12 20h9" />
             <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
           </svg>
