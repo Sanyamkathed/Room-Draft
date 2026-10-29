@@ -8,10 +8,10 @@ import { recommend } from "@/lib/assistant/scoring";
 import { formatDims, formatINR } from "@/lib/catalog/source";
 import { AESTHETICS, aestheticById, type AestheticId } from "@/lib/catalog/types";
 import { useProjects, usePreferences } from "@/lib/hooks/useProjects";
-import { PaletteDots } from "@/components/shell/MoodTile";
 import { AestheticCarousel } from "@/components/shell/AestheticCarousel";
 import { aestheticPhoto } from "@/lib/catalog/aestheticPhotos";
 import { ProductThumb } from "@/components/studio/ProductThumb";
+import { GlareCard } from "@/components/ui/glare-cards";
 import { Button, Chip, buttonClasses } from "@/components/ui/primitives";
 import { storage } from "@/lib/storage/idb";
 import { cn } from "@/lib/utils/cn";
@@ -36,12 +36,6 @@ function spread<T extends { category: string }>(ranked: T[], n: number): T[] {
     if (!out.includes(p)) out.push(p);
   }
   return out;
-}
-
-/** Perceived lightness, to pick legible text on a palette swatch. */
-function isLight(hex: string): boolean {
-  const n = parseInt(hex.slice(1), 16);
-  return 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255) > 150;
 }
 
 function isAesthetic(v: string | null): v is AestheticId {
@@ -94,7 +88,7 @@ function DiscoverContent() {
     const a = aestheticById(active);
     // The six strongest matches dress the mood board; the rest are listed below it.
     const ranked = recommend({ aesthetics: [active] }, 24);
-    const board = spread(ranked, 6);
+    const board = spread(ranked, 7);
     const rest = ranked.filter((p) => !board.includes(p)).slice(0, 12);
     const picks = rest.length >= 4 ? rest : ranked.slice(0, 12);
     const isSaved = saved.includes(active);
@@ -143,9 +137,24 @@ function DiscoverContent() {
                 )}
               </Button>
 
-              <div className="flex items-center gap-2.5 rounded-full glass-strong px-3.5 py-2">
-                <PaletteDots aesthetic={active} />
-                <span className="text-[11.5px] font-medium text-chalk-2">Palette</span>
+            </div>
+
+            {/* The palette up front, big enough to read and copy, not three dots */}
+            <div className="mt-7">
+              <p className="mb-2 text-[12px] font-semibold text-white/80">Palette</p>
+              <div className="flex flex-wrap gap-2">
+                {a.swatch.map((c, i) => (
+                  <div
+                    key={c}
+                    className="flex items-center gap-2.5 rounded-[12px] border border-white/15 bg-[rgba(28,24,20,0.6)] py-1.5 pl-1.5 pr-3 backdrop-blur-sm"
+                  >
+                    <span className="size-9 rounded-[8px] border border-white/20" style={{ background: c }} />
+                    <span>
+                      <span className="block text-[11px] text-white/60">{["Base", "Mid", "Accent"][i]}</span>
+                      <span className="block font-mono text-[12px] font-semibold uppercase text-white">{c}</span>
+                    </span>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
@@ -201,6 +210,8 @@ function DiscoverContent() {
                 className={cn(
                   "group relative overflow-hidden rounded-[var(--radius-card)] border border-line transition-[border-color,transform] duration-300 hover:-translate-y-0.5 hover:border-line-strong",
                   i === 0 && "md:row-span-2",
+                  // Seven fill the desktop grid; a two-column phone grid wants an even six.
+                  i === 6 && "hidden md:block",
                 )}
                 style={{
                   background: `radial-gradient(70% 60% at 50% 42%, ${a.swatch[i % 2 === 0 ? 1 : 2]}38 0%, transparent 72%), linear-gradient(160deg, ${a.swatch[0]} 0%, #1c1814 100%)`,
@@ -218,18 +229,6 @@ function DiscoverContent() {
               </Link>
             ))}
 
-            <div className="flex flex-col overflow-hidden rounded-[var(--radius-card)] border border-line">
-              {a.swatch.map((c) => (
-                <div key={c} className="flex flex-1 items-end px-3.5 pb-2" style={{ background: c }}>
-                  <span
-                    className="font-mono text-[10.5px] uppercase tracking-wider"
-                    style={{ color: isLight(c) ? "#1c1814" : "#f4f0e8" }}
-                  >
-                    {c}
-                  </span>
-                </div>
-              ))}
-            </div>
           </div>
         </section>
 
@@ -246,10 +245,7 @@ function DiscoverContent() {
             {picks.map((p) => {
               const liked = prefs.savedProductIds.includes(p.id);
               return (
-                <div
-                  key={p.id}
-                  className="group rounded-[var(--radius-card)] border border-white/8 bg-ink-1 p-3 transition-all duration-300 hover:border-white/18"
-                >
+                <GlareCard key={p.id} className="p-3">
                   <ProductThumb product={p} className="aspect-square w-full" />
                   <p className="mt-2.5 truncate text-[13px] font-medium">{p.name}</p>
                   <p className="text-[11.5px] text-chalk-4">{p.brand}</p>
@@ -277,7 +273,7 @@ function DiscoverContent() {
                       )}
                     </button>
                   </div>
-                </div>
+                </GlareCard>
               );
             })}
           </div>

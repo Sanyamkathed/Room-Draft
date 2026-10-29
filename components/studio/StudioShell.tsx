@@ -8,7 +8,6 @@ import {
   Check,
   Columns2,
   Download,
-  SlidersHorizontal,
   Sparkles,
   Trash2,
 } from "lucide-react";
@@ -364,18 +363,6 @@ export function StudioShell() {
               </button>
             )}
 
-            {!rightOpen && selectedId && overlay !== "compare" && (
-              <button
-                onClick={() => setRightOpen(true)}
-                className={cn(
-                  "pointer-events-auto absolute right-3 top-3 inline-flex h-10 items-center gap-2",
-                  "rounded-[12px] glass-strong px-3.5 text-[13px] font-medium text-chalk edge-light transition-all hover:bg-white/8",
-                )}
-              >
-                <SlidersHorizontal className="size-3.5 text-accent" />
-                Edit selection
-              </button>
-            )}
 
             {overlay !== "compare" && (
               <BottomToolbar onOpenAr={() => setOverlay("ar")} />
@@ -394,7 +381,7 @@ export function StudioShell() {
               "absolute inset-x-0 bottom-0 z-30 flex h-[var(--sheet)] flex-col overflow-hidden rounded-t-[22px] border-t border-white/12 bg-ink-1",
               selectedId && !viewing ? "" : "hidden",
               dragHeight === null && "transition-[height] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
-              "md:static md:inset-auto md:z-auto md:block md:h-full md:shrink-0 md:rounded-none md:border-t-0 md:bg-transparent",
+              "md:static md:inset-auto md:z-auto md:flex md:h-full md:shrink-0 md:rounded-none md:border-t-0 md:bg-transparent",
             )}
           >
             <SheetHandle size={sheetSize} onSize={setSheetSize} onDrag={setDragHeight} />

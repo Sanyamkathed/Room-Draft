@@ -90,7 +90,20 @@ const CoverflowCarousel = ({
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+  // Auto-play only while the carousel is on screen: animating it out of
+  // sight costs a phone battery and frames for nothing.
+  const [inView, setInView] = useState(true);
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(([entry]) => setInView(entry.isIntersecting), { threshold: 0.2 });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
   const gap = width ? Math.min(spacing, width * 0.27) : spacing;
+  // A phone only shows two cards each side; drawing three in 3D costs frames.
+  const visibleOffset = width && width < 640 ? 2 : MAX_VISIBLE_OFFSET;
 
   // A drag ends with a click on whatever card it started on; swallow that one.
   const draggedRef = useRef(false);
@@ -110,7 +123,7 @@ const CoverflowCarousel = ({
   );
 
   useEffect(() => {
-    if (!autoplay || shouldReduceMotion || isPaused || total <= 1) {
+    if (!autoplay || shouldReduceMotion || isPaused || !inView || total <= 1) {
       return;
     }
 
@@ -119,7 +132,7 @@ const CoverflowCarousel = ({
     }, autoplayDelay);
 
     return () => clearInterval(timer);
-  }, [autoplay, shouldReduceMotion, isPaused, activeIndex, autoplayDelay, goTo, total]);
+  }, [autoplay, shouldReduceMotion, isPaused, inView, activeIndex, autoplayDelay, goTo, total]);
 
   useEffect(() => {
     const handleVisibility = () => {
@@ -208,10 +221,13 @@ const CoverflowCarousel = ({
       >
         {items.map((item, i) => {
           const offset = offsetOf(i);
-          const isVisible = Math.abs(offset) <= MAX_VISIBLE_OFFSET;
+          // One card beyond the visible fan stays mounted (and transparent) so its
+          // photo is already decoded when it slides in, instead of popping in mid-swipe.
+          const isVisible = Math.abs(offset) <= visibleOffset;
+          const isMounted = Math.abs(offset) <= visibleOffset + 1;
           const isActive = offset === 0;
 
-          if (!isVisible) {
+          if (!isMounted) {
             return null;
           }
 
@@ -231,7 +247,7 @@ const CoverflowCarousel = ({
                 shouldReduceMotion
                   ? { opacity: isActive ? 1 : 0, x: translateX }
                   : {
-                      opacity: 1,
+                      opacity: isVisible ? 1 : 0,
                       rotateY,
                       scale,
                       x: translateX,
@@ -240,21 +256,21 @@ const CoverflowCarousel = ({
               }
               aria-hidden={!isActive}
               className={cn(
-                "absolute h-[340px] w-[270px] overflow-hidden rounded-[var(--radius-card)] border border-line bg-ink-2 shadow-[0_18px_48px_rgba(0,0,0,0.32)]",
-                isActive ? "border-line-strong" : "cursor-pointer",
+                // A big blurred shadow on every moving card is what makes phones
+                // drop frames; only the centre card, which settles, carries one.
+                "absolute h-[340px] w-[270px] overflow-hidden rounded-[var(--radius-card)] border border-line bg-ink-2 [backface-visibility:hidden] will-change-transform",
+                isActive ? "border-line-strong shadow-[0_18px_40px_rgba(0,0,0,0.3)]" : "cursor-pointer",
+                !isVisible && "pointer-events-none",
                 cardClassName,
               )}
               initial={false}
               key={item.id}
               onClickCapture={onCardClickCapture(i)}
-              style={{
-                transformStyle: "preserve-3d",
-                zIndex: total - Math.abs(offset),
-              }}
+              style={{ zIndex: total - Math.abs(offset) }}
               transition={
                 shouldReduceMotion
                   ? { duration: 0 }
-                  : { bounce: 0.1, duration: 0.45, type: "spring" }
+                  : { type: "tween", duration: 0.42, ease: [0.22, 1, 0.36, 1] }
               }
             >
               <div inert={!isActive} className="h-full w-full">
@@ -276,6 +292,7 @@ const CoverflowCarousel = ({
                 animate={{ opacity: Math.min(Math.abs(offset) * 0.28, 0.75) }}
                 className="pointer-events-none absolute inset-0 bg-ink-1"
                 initial={false}
+                transition={{ type: "tween", duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
               />
             </motion.div>
           );

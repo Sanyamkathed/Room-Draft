@@ -28,8 +28,11 @@ export function AestheticCarousel({
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={aestheticPhoto(a.id)}
+          srcSet={`${aestheticPhoto(a.id, 480, 600)} 480w, ${aestheticPhoto(a.id)} 640w`}
+          sizes="(max-width: 767px) 240px, 300px"
           alt={`A ${a.label.toLowerCase()} room`}
           draggable={false}
+          decoding="async"
           loading={i < 4 ? "eager" : "lazy"}
           className="absolute inset-0 size-full object-cover transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-[1.04]"
         />

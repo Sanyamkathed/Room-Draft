@@ -29,6 +29,11 @@ export type ToolMode = "view" | "select" | "move" | "rotate" | "scale";
  * "full" searches. Desktop ignores it — panels are side rails there.
  */
 export type SheetSize = "peek" | "half" | "full";
+/** Laptop and up, where the inspector is a side rail rather than a sheet over the room. */
+function wideScreen(): boolean {
+  return typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches;
+}
+
 export const SHEET_HEIGHT: Record<SheetSize, number> = { peek: 0.3, half: 0.52, full: 0.86 };
 
 /** Snapshot of the state undo cares about. */
@@ -313,7 +318,7 @@ export const useStudio = create<StudioState>((set, get) => {
         draft: null,
         interacting: false,
         selectedId: draft.itemId ?? item.id,
-        rightPanelOpen: true,
+        rightPanelOpen: wideScreen() ? true : get().rightPanelOpen,
       });
       return draft.itemId ?? item.id;
     },
@@ -492,7 +497,15 @@ export const useStudio = create<StudioState>((set, get) => {
       set({ items: [], selectedId: null });
     },
 
-    select: (id) => set({ selectedId: id, rightPanelOpen: id ? true : get().rightPanelOpen }),
+    // On a laptop the inspector is a side rail, so selecting opens it. On a
+    // phone it's a sheet over the room, so selecting (or moving) never opens
+    // it: the Edit tag above the item does, and picking another item closes it.
+    select: (id) =>
+      set(
+        wideScreen()
+          ? { selectedId: id, rightPanelOpen: id ? true : get().rightPanelOpen }
+          : { selectedId: id, rightPanelOpen: id && id === get().selectedId ? get().rightPanelOpen : false },
+      ),
     setCameraMode: (cameraMode) => set({ cameraMode }),
     setTool: (tool) =>
       set(tool === "view" ? { tool, selectedId: null, draft: null } : { tool }),

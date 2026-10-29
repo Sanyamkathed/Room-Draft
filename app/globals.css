@@ -65,9 +65,10 @@
   }
 
   body {
-    /* Flat on purpose: the hero fades into exactly this colour, so any glow
-       here would show up as a seam under it */
-    background: var(--color-ink-0);
+    /* The base colour lives on <html>. The body stays clear so the aurora
+       backdrop (fixed, behind everything) shows through; a body background
+       would be painted over it. */
+    background: transparent;
     color: var(--color-chalk);
     font-family: var(--font-sans);
     /* Quicksand's regular is hairline-thin on dark; 500 reads as body text */
