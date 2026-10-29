@@ -247,9 +247,16 @@ function ShopContent() {
             const liked = prefs.savedProductIds.includes(p.id);
             return (
               <GlareCard key={p.id} className="flex min-w-0 flex-col">
-              <article className="flex h-full min-w-0 flex-col p-2.5 md:p-3">
+              {/* The whole card opens the product; the image button keeps it reachable by keyboard */}
+              <article
+                onClick={() => setDetail(p)}
+                className="flex h-full min-w-0 cursor-pointer flex-col p-2.5 md:p-3"
+              >
                 <button
-                  onClick={() => setDetail(p)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDetail(p);
+                  }}
                   className="text-left"
                   aria-label={`View ${p.name}`}
                 >
@@ -279,7 +286,11 @@ function ShopContent() {
                   </div>
                   <button
                     aria-label={liked ? `Unsave ${p.name}` : `Save ${p.name}`}
-                    onClick={() => void toggleSavedProduct(p.id)}
+                    onClick={(e) => {
+                      // Saving shouldn't also open the product.
+                      e.stopPropagation();
+                      void toggleSavedProduct(p.id);
+                    }}
                     className={cn(
                       "grid size-8 shrink-0 place-items-center rounded-[10px] transition-all",
                       liked
