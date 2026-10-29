@@ -159,7 +159,19 @@ export async function pinterestGet<T>(
     await clearTokens();
     throw new PinterestError(401, "Your Pinterest connection expired. Connect again.");
   }
-  if (!res.ok) throw new PinterestError(res.status, "Pinterest couldn't load that right now.");
+  if (!res.ok) {
+    // Pinterest explains itself in the body ({ code, message }); keep it in the server log.
+    const body = await res.text().catch(() => "");
+    console.error(`Pinterest ${path} ${res.status}: ${body.slice(0, 300)}`);
+    if (res.status === 403) {
+      // On Trial access Pinterest only serves the app's own account.
+      throw new PinterestError(
+        403,
+        "Pinterest is only letting RoomDraft read a few accounts while our app is in review. Paste a Pin link below for now.",
+      );
+    }
+    throw new PinterestError(res.status, "Pinterest couldn't load that right now.");
+  }
   return (await res.json()) as T;
 }
 
