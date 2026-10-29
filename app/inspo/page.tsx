@@ -318,7 +318,10 @@ function Feed({
         </div>
       </div>
 
-      <p className="mb-4 text-[13px] text-chalk-3">{label}</p>
+      {/* The fallback panel names the search itself, so a heading promising Pins would mislead */}
+      {!(submitted && mode === "all" && !allAvailable) && (
+        <p className="mb-4 text-[13px] text-chalk-3">{label}</p>
+      )}
 
       {submitted && mode === "all" && !allAvailable && !loading ? (
         <div className="rounded-[16px] border border-line bg-ink-2 px-5 py-7 text-center">
