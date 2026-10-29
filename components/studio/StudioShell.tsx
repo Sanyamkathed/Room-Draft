@@ -394,7 +394,7 @@ export function StudioShell() {
               "absolute inset-x-0 bottom-0 z-30 flex h-[var(--sheet)] flex-col overflow-hidden rounded-t-[22px] border-t border-white/12 bg-ink-1",
               selectedId && !viewing ? "" : "hidden",
               dragHeight === null && "transition-[height] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
-              "md:static md:inset-auto md:z-auto md:block md:h-full md:shrink-0 md:rounded-none md:border-t-0 md:bg-transparent",
+              "md:static md:inset-auto md:z-auto md:flex md:h-full md:shrink-0 md:rounded-none md:border-t-0 md:bg-transparent",
             )}
           >
             <SheetHandle size={sheetSize} onSize={setSheetSize} onDrag={setDragHeight} />
