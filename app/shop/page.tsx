@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowRight,
   Bookmark,
@@ -16,7 +16,7 @@ import {
   Star,
   X,
 } from "lucide-react";
-import { PRODUCTS } from "@/lib/catalog/seed";
+import { PRODUCTS, PRODUCTS_BY_ID } from "@/lib/catalog/seed";
 import { defaultCatalogSource, formatDims, formatINR, marketplaceUrl } from "@/lib/catalog/source";
 import {
   AESTHETICS,
@@ -69,7 +69,21 @@ function ShopContent() {
   const [sort, setSort] = React.useState<SortId>("recommended");
   const [featuredOnly, setFeaturedOnly] = React.useState(false);
   const [panel, setPanel] = React.useState<null | "filter" | "sort">(null);
-  const [detail, setDetail] = React.useState<Product | null>(null);
+  const router = useRouter();
+  // ?item=<id> opens that product straight away, so a link from a mood board
+  // or the homepage lands on its details instead of a search to click again.
+  const linkedItem = params.get("item");
+  const [detail, setDetail] = React.useState<Product | null>(
+    () => (linkedItem ? PRODUCTS_BY_ID.get(linkedItem) ?? null : null),
+  );
+  React.useEffect(() => {
+    if (linkedItem) setDetail(PRODUCTS_BY_ID.get(linkedItem) ?? null);
+  }, [linkedItem]);
+  const closeDetail = React.useCallback(() => {
+    setDetail(null);
+    // Drop the param so closing really closes, and a reload doesn't reopen it.
+    if (linkedItem) router.replace("/shop", { scroll: false });
+  }, [linkedItem, router]);
   const activeFilters = (category !== "all" ? 1 : 0) + (aesthetic ? 1 : 0) + (featuredOnly ? 1 : 0);
 
   const results = React.useMemo(() => {
@@ -311,7 +325,7 @@ function ShopContent() {
       {detail && (
         <ProductSheet
           product={detail}
-          onClose={() => setDetail(null)}
+          onClose={closeDetail}
           onOpen={setDetail}
           projectId={projects?.[0]?.id}
         />
