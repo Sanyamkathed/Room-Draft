@@ -8,7 +8,6 @@ import {
   Check,
   Columns2,
   Download,
-  SlidersHorizontal,
   Sparkles,
   Trash2,
 } from "lucide-react";
@@ -364,23 +363,6 @@ export function StudioShell() {
               </button>
             )}
 
-            {!rightOpen && selectedId && overlay !== "compare" && (
-              <button
-                // Placing an item shrinks the sheet to a peek so the item stays
-                // in view; editing needs room for the controls, so open at half.
-                onClick={() => {
-                  setRightOpen(true);
-                  if (sheetSize === "peek") setSheetSize("half");
-                }}
-                className={cn(
-                  "pointer-events-auto absolute right-3 top-3 inline-flex h-10 items-center gap-2",
-                  "rounded-[12px] glass-strong px-3.5 text-[13px] font-medium text-chalk edge-light transition-all hover:bg-white/8",
-                )}
-              >
-                <SlidersHorizontal className="size-3.5 text-accent" />
-                Edit selection
-              </button>
-            )}
 
             {overlay !== "compare" && (
               <BottomToolbar onOpenAr={() => setOverlay("ar")} />
