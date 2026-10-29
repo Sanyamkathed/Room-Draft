@@ -65,7 +65,7 @@ export function RightPanel() {
           </p>
         </div>
       ) : (
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           {/* ---------------- Product ---------------- */}
           <div className="px-4 pb-4">
             <div className="flex gap-3">
