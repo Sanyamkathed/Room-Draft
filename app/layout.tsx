@@ -32,7 +32,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={quicksand.variable}>
-      <body className="min-h-dvh bg-ink-0 antialiased">
+      <body className="min-h-dvh antialiased">
         <AppShell>{children}</AppShell>
       </body>
     </html>

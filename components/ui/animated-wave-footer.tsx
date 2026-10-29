@@ -73,7 +73,7 @@ export default function AnimatedWaveFooter({ className }: { className?: string }
   return (
     <footer
       className={cn(
-        "relative isolate overflow-hidden bg-[linear-gradient(to_bottom,var(--color-ink-0)_0%,#2c241c_45%,#3a2d20_100%)] pt-12 md:pt-24",
+        "relative isolate overflow-hidden bg-[linear-gradient(to_bottom,transparent_0%,rgba(44,36,28,0.75)_45%,#3a2d20_100%)] pt-12 md:pt-24",
         className,
       )}
     >

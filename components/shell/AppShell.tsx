@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { Wordmark } from "@/components/brand/Logo";
 import AnimatedWaveFooter from "@/components/ui/animated-wave-footer";
+import { AuroraBackground } from "@/components/ui/aurora-background";
 import { cn } from "@/lib/utils/cn";
 
 /** Text links in the desktop header. */
@@ -84,6 +85,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="relative flex min-h-dvh flex-col">
+      {/* Drifting brand light behind every page. The homepage hero paints its
+          own picture over it; everything below shows it through. */}
+      <AuroraBackground
+        className="pointer-events-none fixed inset-0 -z-10"
+        speed={0.35}
+        blobCount={4}
+      />
       <header className="sticky top-0 z-40 flex min-h-[66px] items-center justify-between gap-6 border-b border-line bg-ink-1/92 px-4 py-3 backdrop-blur-[16px] md:min-h-[76px] md:px-[clamp(22px,3.4vw,52px)]">
         <div className="flex items-center gap-[clamp(24px,4vw,64px)]">
           <Link href="/" aria-label="RoomDraft home" className="shrink-0 text-chalk">

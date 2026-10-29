@@ -71,7 +71,13 @@ export default function HomePage() {
   return (
     <div>
       {/* ---------------- Hero ---------------- */}
-      <section className="relative isolate flex min-h-[720px] items-end overflow-hidden bg-ink-0 [container-type:inline-size] md:min-h-[clamp(560px,45vw,700px)] md:items-center">
+      <section className="relative isolate flex min-h-[720px] items-end overflow-hidden [container-type:inline-size] md:min-h-[clamp(560px,45vw,700px)] md:items-center">
+        {/* The hero's whole backdrop fades out at the bottom, so it dissolves
+            into the page's aurora instead of ending on a hard edge. */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 -z-10 bg-ink-0 [mask-image:linear-gradient(to_bottom,black_72%,transparent_100%)]"
+        >
         {/* The render and its tags share one box with the image's own aspect
             ratio, sized to cover the hero, so tags track the furniture. */}
         <div
@@ -96,6 +102,7 @@ export default function HomePage() {
           aria-hidden
           className="pointer-events-none absolute inset-x-0 bottom-0 -z-10 h-[55%] bg-[linear-gradient(to_top,var(--color-ink-0)_0%,var(--color-ink-0)_14%,rgba(36,31,26,0.82)_42%,transparent_100%)]"
         />
+        </div>
 
         {/* Product callouts, desktop only — on a phone they would sit under the copy */}
         <div className="absolute left-0 top-0 hidden aspect-[1920/1023] w-[max(100cqw,1320px)] translate-x-[14%] lg:block">
