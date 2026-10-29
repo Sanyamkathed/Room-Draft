@@ -206,7 +206,7 @@ function DiscoverContent() {
             {board.map((p, i) => (
               <Link
                 key={p.id}
-                href={`/shop?q=${encodeURIComponent(p.name)}`}
+                href={`/shop?item=${encodeURIComponent(p.id)}`}
                 className={cn(
                   "group relative overflow-hidden rounded-[var(--radius-card)] border border-line transition-[border-color,transform] duration-300 hover:-translate-y-0.5 hover:border-line-strong",
                   i === 0 && "md:row-span-2",

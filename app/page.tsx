@@ -126,7 +126,7 @@ export default function HomePage() {
                   }
                 />
                 <Link
-                  href={`/shop?q=${encodeURIComponent(p.name)}`}
+                  href={`/shop?item=${encodeURIComponent(p.id)}`}
                   className={`group absolute left-[-12px] inline-flex items-center gap-2.5 whitespace-nowrap rounded-[12px] border border-white/20 bg-[rgba(35,31,27,0.86)] py-2 pl-2 pr-3 text-chalk shadow-[0_8px_24px_rgba(0,0,0,0.18)] backdrop-blur-[12px] transition-colors hover:border-white/35 ${
                     side === "above" ? "bottom-[43px]" : "top-[43px]"
                   }`}
