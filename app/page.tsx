@@ -11,7 +11,6 @@ import {
   Sofa,
 } from "lucide-react";
 import { PRODUCTS_BY_ID } from "@/lib/catalog/seed";
-import { formatINR } from "@/lib/catalog/source";
 import { useProjects } from "@/lib/hooks/useProjects";
 import { Skeleton, buttonClasses } from "@/components/ui/primitives";
 import { AestheticCarousel } from "@/components/shell/AestheticCarousel";
@@ -126,12 +125,7 @@ export default function HomePage() {
                   }`}
                 >
                   <ProductThumb product={p} className="size-[38px] rounded-[8px]" />
-                  <span>
-                    <span className="block text-[12.5px] font-medium leading-tight">{p.name}</span>
-                    <small className="mt-0.5 block text-[11px] text-chalk-2">
-                      {formatINR(p.price)}
-                    </small>
-                  </span>
+                  <span className="text-[12.5px] font-medium leading-tight">{p.name}</span>
                   <ArrowRight className="ml-1 size-3.5 text-chalk-2 transition-transform duration-300 group-hover:translate-x-0.5" />
                 </Link>
               </div>
