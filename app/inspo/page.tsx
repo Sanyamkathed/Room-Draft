@@ -371,6 +371,16 @@ function Feed({
               />
               <figcaption className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-2 bg-[linear-gradient(to_top,rgba(28,24,20,0.9),transparent)] p-2.5 pt-10 md:opacity-0 md:transition-opacity md:duration-200 md:group-hover:opacity-100 md:group-focus-within:opacity-100">
                 <span className="line-clamp-2 text-[12px] leading-snug text-chalk">{p.title}</span>
+                {/* Every Pin links back to where it lives on Pinterest */}
+                <a
+                  href={p.pinUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label={`Open “${p.title || "this Pin"}” on Pinterest`}
+                  className="ml-auto grid size-8 shrink-0 place-items-center rounded-full bg-ink-0/70 text-chalk backdrop-blur-sm transition-colors hover:bg-ink-0"
+                >
+                  <ExternalLink className="size-3.5" />
+                </a>
                 <button
                   type="button"
                   onClick={() => onAdd({ image: p.full, title: p.title })}

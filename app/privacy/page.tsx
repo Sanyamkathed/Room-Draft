@@ -7,7 +7,7 @@ export const metadata: Metadata = {
 };
 
 const CONTACT = "roomdraft01@gmail.com";
-const UPDATED = "28 October 2026";
+const UPDATED = "30 October 2026";
 
 /**
  * The privacy policy. Plain language, and only what the app actually does:
@@ -100,10 +100,60 @@ export default function PrivacyPage() {
           stays on your device.
         </p>
         <p>
+          <strong>How we use Pinterest data.</strong> Only to show you your own boards and Pins
+          inside RoomDraft and let you place them in your rooms. We never:
+        </p>
+        <ul>
+          <li>sell, rent or share Pinterest data with anyone;</li>
+          <li>use it for advertising, or to build a profile of you;</li>
+          <li>use it to train or improve AI or machine-learning models;</li>
+          <li>show your Pins to anyone else. The feed is visible only to you, in your browser.</li>
+        </ul>
+        <p>
+          Every Pin in the feed links back to the Pin on Pinterest. We follow Pinterest&apos;s{" "}
+          <a href="https://policy.pinterest.com/en/developer-guidelines" target="_blank" rel="noreferrer" className="font-semibold text-chalk underline underline-offset-4 decoration-warm hover:text-warm">
+            Developer Guidelines
+          </a>
+          . Pinterest&apos;s own handling of your data is covered by the{" "}
+          <a href="https://policy.pinterest.com/en/privacy-policy" target="_blank" rel="noreferrer" className="font-semibold text-chalk underline underline-offset-4 decoration-warm hover:text-warm">
+            Pinterest Privacy Policy
+          </a>
+          . RoomDraft is an independent app and isn&apos;t made or endorsed by Pinterest.
+        </p>
+        <p>
           <strong>Disconnecting.</strong> Use &ldquo;Disconnect Pinterest&rdquo; on the Inspo page,
           or remove RoomDraft from the connected apps in your Pinterest settings. Either one ends
           our access straight away.
         </p>
+      </Section>
+
+      <Section title="How we protect it">
+        <ul>
+          <li>The whole site is served over HTTPS.</li>
+          <li>
+            The Pinterest access key is kept in a secure, http-only cookie, so scripts on the page
+            can&apos;t read it, and it is only ever sent to our own server.
+          </li>
+          <li>We don&apos;t run a database of user data, so there is nothing of yours on our servers to leak.</li>
+        </ul>
+      </Section>
+
+      <Section title="Your choices and rights">
+        <ul>
+          <li>
+            <strong>Delete your rooms:</strong> from My spaces, or by clearing this site&apos;s data in
+            your browser.
+          </li>
+          <li>
+            <strong>Remove Pinterest access:</strong> &ldquo;Disconnect Pinterest&rdquo; on the Inspo
+            page deletes the access key straight away.
+          </li>
+          <li>
+            <strong>Ask us anything:</strong> email us to ask what we hold about you or to have it
+            deleted. We reply within 30 days. In practice we hold nothing beyond short-lived hosting
+            logs.
+          </li>
+        </ul>
       </Section>
 
       <Section title="Things we don't do">
